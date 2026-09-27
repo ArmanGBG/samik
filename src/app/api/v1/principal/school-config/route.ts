@@ -16,7 +16,7 @@ const UpdateBody = z.object({
  * academic year.
  */
 export async function PATCH(req: NextRequest) {
-  return withTenantContext(req, ["PRINCIPAL"], async () => {
+  return withTenantContext(req, ["PRINCIPAL", "DEPUTY"], async () => {
     let body: z.infer<typeof UpdateBody>;
     try {
       body = UpdateBody.parse(await req.json());

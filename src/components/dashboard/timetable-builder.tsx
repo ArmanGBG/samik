@@ -269,7 +269,22 @@ export function TimetableBuilder() {
         subtitle="تخصیص درس و معلم به کلاس‌ها — با تشخیص خودکار تداخل دبیران."
         icon={CalendarClock}
         actions={
-          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+          <Dialog
+            open={dialogOpen}
+            onOpenChange={(open) => {
+              setDialogOpen(open);
+              // When opening the dialog, initialize form.classRoomId with the
+              // currently active classroom. Without this, the classroom Select
+              // shows activeClassroom visually but form.classRoomId stays "",
+              // keeping the submit button disabled.
+              if (open) {
+                setForm((f) => ({
+                  ...f,
+                  classRoomId: f.classRoomId || activeClassroom,
+                }));
+              }
+            }}
+          >
             <DialogTrigger asChild>
               <Button className="bg-emerald hover:bg-emerald-dark">
                 <Plus className="h-4 w-4" />

@@ -48,7 +48,7 @@ export async function GET(req: NextRequest) {
  * slot in ANY school, returns 409 Conflict.
  */
 export async function POST(req: NextRequest) {
-  return withTenantContext(req, ["DEPUTY"], async () => {
+  return withTenantContext(req, ["DEPUTY", "PRINCIPAL"], async () => {
     let body: z.infer<typeof CreateBody>;
     try {
       body = CreateBody.parse(await req.json());
@@ -149,7 +149,7 @@ export async function POST(req: NextRequest) {
  * architecture doc — they're configuration, not academic records.)
  */
 export async function DELETE(req: NextRequest) {
-  return withTenantContext(req, ["DEPUTY"], async () => {
+  return withTenantContext(req, ["DEPUTY", "PRINCIPAL"], async () => {
     const id = req.nextUrl.searchParams.get("id");
     if (!id) {
       return NextResponse.json({ ok: false, error: "پارامتر id الزامی است." }, { status: 400 });

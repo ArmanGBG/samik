@@ -40,6 +40,9 @@ interface NavItem {
   icon: any;
   /** If true, this item is only shown for the matching role. */
   roles?: string[];
+  /** Explicit route prefix for this nav item (overrides the user's role route).
+   *  Used when a Principal accesses Deputy routes (e.g. timetable → /deputy/timetable). */
+  routePrefix?: string;
 }
 
 const NAV: NavItem[] = [
@@ -47,16 +50,17 @@ const NAV: NavItem[] = [
   // SuperAdmin
   { href: "schools", label: "مدارس", icon: School, roles: ["SUPER_ADMIN"] },
   // Principal
-  { href: "structure/classrooms", label: "کلاس‌ها", icon: DoorClosed, roles: ["PRINCIPAL"] },
-  { href: "structure/subjects", label: "دروس", icon: BookOpen, roles: ["PRINCIPAL"] },
-  { href: "structure/bell-schedules", label: "زنگ‌ها", icon: Clock, roles: ["PRINCIPAL"] },
-  { href: "structure/term", label: "سال تحصیلی", icon: CalendarClock, roles: ["PRINCIPAL"] },
+  // Principal structure (also accessible by Deputy for classroom/subject/bell management)
+  { href: "structure/classrooms", label: "کلاس‌ها", icon: DoorClosed, roles: ["PRINCIPAL", "DEPUTY"], routePrefix: "/principal" },
+  { href: "structure/subjects", label: "دروس", icon: BookOpen, roles: ["PRINCIPAL", "DEPUTY"], routePrefix: "/principal" },
+  { href: "structure/bell-schedules", label: "زنگ‌ها", icon: Clock, roles: ["PRINCIPAL", "DEPUTY"], routePrefix: "/principal" },
+  { href: "structure/term", label: "سال تحصیلی", icon: CalendarClock, roles: ["PRINCIPAL", "DEPUTY"], routePrefix: "/principal" },
   { href: "staff", label: "پرسنل", icon: Users, roles: ["PRINCIPAL"] },
   { href: "students", label: "دانش‌آموزان", icon: GraduationCap, roles: ["PRINCIPAL"] },
-  // Deputy
-  { href: "timetable", label: "برنامه هفتگی", icon: CalendarClock, roles: ["DEPUTY"] },
-  { href: "live-attendance", label: "حضور و غیاب زنده", icon: ClipboardCheck, roles: ["DEPUTY"] },
-  { href: "notifications", label: "کارتابل پیامک", icon: Bell, roles: ["DEPUTY"] },
+  // Deputy (also accessible by Principal — Principal inherits Deputy access)
+  { href: "timetable", label: "برنامه هفتگی", icon: CalendarClock, roles: ["PRINCIPAL", "DEPUTY"], routePrefix: "/deputy" },
+  { href: "live-attendance", label: "حضور و غیاب زنده", icon: ClipboardCheck, roles: ["PRINCIPAL", "DEPUTY"], routePrefix: "/deputy" },
+  { href: "notifications", label: "کارتابل پیامک", icon: Bell, roles: ["PRINCIPAL", "DEPUTY"], routePrefix: "/deputy" },
   // Teacher
   { href: "attendance", label: "حضور و غیاب کلاس", icon: ClipboardCheck, roles: ["TEACHER"] },
   { href: "gradebook", label: "دفتر نمره", icon: BookOpen, roles: ["TEACHER"] },
@@ -260,10 +264,16 @@ function NavLinks({ items, route, pathname, onNavigate }: NavLinksProps) {
   return (
     <nav className="flex flex-col gap-1 px-2">
       {items.map((item, i) => {
-        const href = `${route}/${item.href === "overview" ? "" : item.href}`;
+        // Use the item's routePrefix if specified (e.g. Deputy routes for
+        // Principal users), otherwise fall back to the user's role route.
+        const effectiveRoute = item.routePrefix ?? route;
+        const href =
+          item.href === "overview"
+            ? effectiveRoute
+            : `${effectiveRoute}/${item.href}`;
         const isActive =
           pathname === href ||
-          (item.href === "overview" && pathname === route);
+          (item.href === "overview" && pathname === effectiveRoute);
         const Icon = item.icon;
         return (
           <Link

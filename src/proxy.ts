@@ -34,8 +34,10 @@ const ROOT_ONLY_PATHS = new Set(["/select-profile"]);
 
 const ROLE_PATH_MAP: Array<{ prefix: string; roles: string[] }> = [
   { prefix: "/super-admin", roles: ["SUPER_ADMIN"] },
-  { prefix: "/principal", roles: ["PRINCIPAL"] },
-  { prefix: "/deputy", roles: ["DEPUTY"] },
+  // Principal routes (structure CRUD) — Deputy also has access for classroom/subject/bell management
+  { prefix: "/principal", roles: ["PRINCIPAL", "DEPUTY"] },
+  // Deputy routes — Principal inherits all Deputy access (timetable, live-attendance, notifications)
+  { prefix: "/deputy", roles: ["PRINCIPAL", "DEPUTY"] },
   { prefix: "/teacher", roles: ["TEACHER"] },
   { prefix: "/student", roles: ["STUDENT"] },
   { prefix: "/api/v1/super-admin", roles: ["SUPER_ADMIN"] },

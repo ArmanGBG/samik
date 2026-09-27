@@ -80,7 +80,7 @@ export async function GET(req: NextRequest) {
  * ClassRoom, so deletedAt is null by default.
  */
 export async function POST(req: NextRequest) {
-  return withTenantContext(req, ["PRINCIPAL"], async () => {
+  return withTenantContext(req, ["PRINCIPAL", "DEPUTY"], async () => {
     let body: z.infer<typeof CreateBody>;
     try {
       body = CreateBody.parse(await req.json());
@@ -129,7 +129,7 @@ export async function POST(req: NextRequest) {
  * (tenant-extension strips it).
  */
 export async function PATCH(req: NextRequest) {
-  return withTenantContext(req, ["PRINCIPAL"], async () => {
+  return withTenantContext(req, ["PRINCIPAL", "DEPUTY"], async () => {
     const id = req.nextUrl.searchParams.get("id");
     if (!id) {
       return NextResponse.json({ ok: false, error: "پارامتر id الزامی است." }, { status: 400 });
@@ -167,7 +167,7 @@ export async function PATCH(req: NextRequest) {
  * to `update deletedAt = now()`. Existing grade history is preserved.
  */
 export async function DELETE(req: NextRequest) {
-  return withTenantContext(req, ["PRINCIPAL"], async () => {
+  return withTenantContext(req, ["PRINCIPAL", "DEPUTY"], async () => {
     const id = req.nextUrl.searchParams.get("id");
     if (!id) {
       return NextResponse.json({ ok: false, error: "پارامتر id الزامی است." }, { status: 400 });

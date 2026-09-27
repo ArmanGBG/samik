@@ -64,7 +64,7 @@ export async function POST(req: NextRequest) {
   const schoolId = req.headers.get("x-samik-school-id");
   const userId = req.headers.get("x-samik-user-id");
   const role = req.headers.get("x-samik-role");
-  if (!schoolId || !userId || role !== "DEPUTY") {
+  if (!schoolId || !userId || (role !== "DEPUTY" && role !== "PRINCIPAL")) {
     return NextResponse.json(
       { ok: false, error: "این عملیات نیازمند نقش ناظم است." },
       { status: 403 }
@@ -73,7 +73,7 @@ export async function POST(req: NextRequest) {
 
   // Verify all IDs are DRAFT + belong to this school (tenant filter active
   // when we run inside withTenantContext).
-  return withTenantContext(req, ["DEPUTY"], async () => {
+  return withTenantContext(req, ["DEPUTY", "PRINCIPAL"], async () => {
     const drafts = await db.notificationOutbox.findMany({
       where: { id: { in: body.ids }, status: "DRAFT" },
       select: {
