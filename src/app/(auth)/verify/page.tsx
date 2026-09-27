@@ -24,6 +24,7 @@ import {
   RotateCcw,
   ShieldCheck,
 } from "lucide-react";
+import { toEnglishDigits } from "@/lib/persian-digits";
 
 const RESEND_COOLDOWN = 120; // seconds
 
@@ -156,10 +157,22 @@ export default function VerifyPage() {
                 <InputOTP
                   maxLength={6}
                   value={code}
-                  onChange={(v) => setCode(v)}
+                  onChange={(v) => {
+                    // CRITICAL: Normalize Persian/Arabic digits to ASCII.
+                    // Persian keyboards produce ۱۲۳۴۵۶ instead of 123456.
+                    // The OTP component + server validation strictly expect
+                    // ASCII digits, so we convert BEFORE setting state.
+                    const normalized = toEnglishDigits(v);
+                    setCode(normalized);
+                  }}
                   autoFocus
                   inputMode="numeric"
-                  pattern="^[0-9]*$"
+                  // CRITICAL: pattern must allow Persian (۰-۹) and Arabic (٠-٩)
+                  // digits in ADDITION to ASCII (0-9), so the input-otp
+                  // library doesn't reject them at the keystroke level.
+                  // The onChange handler normalizes them to ASCII before
+                  // updating state.
+                  pattern="^[0-9۰-۹٠-٩]+$"
                   containerClassName="justify-center"
                 >
                   <InputOTPGroup className="flex-row" dir="ltr">

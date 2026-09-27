@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/card";
 import { toast } from "sonner";
 import { Loader2, Phone, ShieldCheck } from "lucide-react";
+import { toAsciiDigitsOnly } from "@/lib/persian-digits";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -100,7 +101,12 @@ export default function LoginPage() {
                   placeholder="09123456789"
                   className="pr-10 pl-3 text-right tabular-nums h-10"
                   value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
+                  onChange={(e) => {
+                    // Normalize Persian/Arabic digits to ASCII + strip
+                    // any non-digit characters (spaces, dashes, etc.)
+                    const normalized = toAsciiDigitsOnly(e.target.value);
+                    setPhone(normalized);
+                  }}
                   required
                   pattern="09\d{9}"
                   maxLength={11}
