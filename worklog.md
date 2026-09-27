@@ -324,3 +324,43 @@ Stage Summary:
   3. ✓ Global Conflict Detector (runBypassingTenant + string-based overlap + 409)
   4. ✓ Teacher current-session API + Hero Card UI
 - Ready for Phase 3 (Attendance + Grading + BehavioralPoints + SSE).
+
+---
+Task ID: LP-1
+Agent: Senior Full-Stack Engineer (main)
+Task: Phase 2.5 — World-Class SaaS Landing Page for Samik.
+
+Work Log:
+- Updated `src/app/page.tsx` to be a public marketing landing page:
+  - No cookie / invalid token → render <LandingPage isAuthenticated={false} />
+  - Root token → redirect /select-profile (skip landing)
+  - Contextual token → redirect /<role-slug> dashboard (skip landing)
+  - Authenticated users skip the landing page entirely (no marketing fluff in their way).
+- Added "/" to PUBLIC_PATHS in proxy.ts so the edge middleware doesn't redirect unauthenticated visitors to /login.
+- Built reusable marketing components in src/components/marketing/:
+  - motion.tsx — shared Framer Motion variants (fadeUp, fadeIn, scaleIn, staggerContainer) + Reveal wrapper with viewport-triggered animations.
+  - navbar.tsx — sticky navbar with scroll-aware shadow; server-passed initialIsAuthenticated prop to avoid flash; client-side useEffect hydrates via /api/v1/me; conditional button "ورود به سیستم" (Navy) for guests vs "داشبورد من" (Emerald) for authed users; mobile hamburger menu with Sheet.
+  - hero.tsx — headline "سامیک؛ پایان عصر دفتر نمره کاغذی" with gradient text on the second line; sub-headline matching the architect's spec; two CTAs (Primary Navy "ورود به سیستم", Outline "درخواست دمو"); trust strip (چندمستاجره امن / آفلاین-فرست / RTL کامل); pure-CSS geometric dashboard mock with window chrome, Hero Card, mini agenda, and 3 floating badges (آفلاین / امنیت RLS / Idempotent); subtle grid pattern background + radial spotlight (no blobs).
+  - features.tsx — 4-pillar grid (WifiOff/CalendarClock/Activity/Grid3x3 Lucide icons) with color-tinted icon containers (emerald/navy/info/warning); top accent line on hover; staggered scroll-reveal via framer-motion.
+  - roles.tsx — alternating rows for مدیر/ناظم/معلم/اولیا; each row has icon + label on one side and 4 bullet points on the other (reverse=true for ناظم and اولیا); role-colored bullets; subtle geometric corner decoration.
+  - cta.tsx — navy gradient section with diagonal repeating-line pattern; emerald accent line at top; "آماده پایان دادن به کاغذبازی مدرسه هستید؟" headline; two CTA buttons.
+  - footer.tsx — brand column + 3 link columns (محصول/منابع/شرکت); copyright "© ۱۴۰۴ سامیک" with Persian numerals; "ساخته‌شده در ایران با ❤" with emerald pulse dot.
+  - landing-page.tsx — orchestrator that composes Navbar + Hero + Features + Roles + CTA + Footer in a min-h-screen flex layout with sticky footer.
+- Animations: all scroll-reveals use Framer Motion's `whileInView` with `viewport={{ once: true, margin: "-80px" }}` and an expo-out ease curve [0.16, 1, 0.3, 1] for smooth professional motion. No flashy springs, no janky bounces.
+- Typography: Vazirmatn with `tracking-tight` on headings, `leading-relaxed` on paragraphs. Persian numerals via toLocaleString("fa-IR") where needed.
+- Color discipline: stuck to Navy #1E3A8A (primary), Emerald #10B981 (accent), Off-white #F8FAFC (background). Used info-blue and warning-amber only for the 4 feature tints to differentiate pillars. NO indigo, NO unbranded blues.
+
+Stage Summary:
+- `bun run lint` → 0 errors, 0 warnings (fixed one JSX closing-tag typo in cta.tsx).
+- Dev log: GET / returns 200 for public visitors, 307 redirect for authenticated users (who skip to their dashboard).
+- agent-browser verified end-to-end:
+  - Public visitor sees: Navbar (ورود به سیستم button) → Hero (headline + subhead + CTAs + dashboard mock with floating badges) → Features (4 color-tinted cards) → Roles (4 alternating rows) → CTA (navy gradient) → Footer (3 link columns + copyright ۱۴۰۴).
+  - Authenticated deputy visiting / → instantly redirected to /deputy (no landing page flash).
+  - Navbar's client-side /api/v1/me hydration correctly returns 401 for guests → button stays "ورود به سیستم".
+- Screenshots saved:
+  - upload/landing-hero.png (above-the-fold hero section)
+  - upload/landing-features.png (4-pillar grid)
+  - upload/landing-roles.png (alternating role rows)
+  - upload/landing-cta-footer.png (CTA + footer)
+  - upload/landing-full.png (full-page capture)
+- Ready to resume Phase 3 (Attendance + Grading + BehavioralPoints + SSE) on architect approval.

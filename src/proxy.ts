@@ -23,6 +23,7 @@ import { verifyToken, AUTH_COOKIE_NAME, SamikPayload } from "@/lib/auth/jwt";
  */
 
 const PUBLIC_PATHS = new Set([
+  "/",            // Landing page (public marketing) — Phase 2.5
   "/login",
   "/verify",
   "/api/v1/auth/otp",
