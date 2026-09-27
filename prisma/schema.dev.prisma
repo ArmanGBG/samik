@@ -387,6 +387,19 @@ model NotificationOutbox {
   recipientPhone  String
   eventType       EventType
   messageBody     String
+  /**
+   * Structured metadata for the SMS pattern API (Phase 5.1).
+   * Stores the absence alert variables as JSON so the background
+   * send-bulk job can call `sendAbsenceAlert(studentName, date,
+   * subject, schoolName)` without re-fetching from the DB.
+   *
+   * Format: { "studentName": "...", "date": "...", "subject": "...",
+   *           "schoolName": "..." }
+   *
+   * On SQLite: stored as TEXT. On PostgreSQL: could be @db.JsonB
+   * for native querying (future migration).
+   */
+  metadataJson    String?
   status          NotificationStatus @default(DRAFT)
   sentAt          DateTime?
   createdAt       DateTime           @default(now())

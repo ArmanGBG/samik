@@ -204,10 +204,17 @@ export async function POST(req: NextRequest) {
           })),
         });
 
-        // === NotificationOutbox Draft Generation (Section 8) ===
+        // === NotificationOutbox Draft Generation (Section 8 + Phase 5.1) ===
         // For each ABSENT student, create a DRAFT notification to their
-        // guardian. We also delete any existing DRAFT notifications for
-        // this session+student pair to avoid duplicates on re-submit.
+        // guardian. We store BOTH:
+        //   - `messageBody`: a human-readable Persian string (for the
+        //     deputy's outbox UI display + editing).
+        //   - `metadataJson`: structured JSON with the 4 pattern variables
+        //     (studentName, date, subject, schoolName) so the background
+        //     send-bulk job can call `sendAbsenceAlert()` without re-fetching.
+        //
+        // We also delete any existing DRAFT notifications for this
+        // session+student pair to avoid duplicates on re-submit.
         const absenteesWithPhone = recordsToCreate.filter(
           (r) => r.status === "ABSENT" && r.guardianPhone
         );
@@ -218,21 +225,39 @@ export async function POST(req: NextRequest) {
             schoolId: ctx.schoolId,
             status: "DRAFT",
             studentUserId: { in: absenteesWithPhone.map((r) => r.studentUserId) },
-            // We can't filter by session directly (no FK), but the message
-            // body includes the subject+date which acts as a natural key.
           },
         });
 
         if (absenteesWithPhone.length > 0) {
-          const today = new Date().toLocaleDateString("fa-IR");
+          const todayFa = new Date().toLocaleDateString("fa-IR");
+
+          // Fetch school name for the metadata (needed by the pattern API).
+          // This is a small query inside the transaction — acceptable cost.
+          const schoolInfo = await tx.school.findUnique({
+            where: { id: ctx.schoolId },
+            select: { name: true },
+          });
+          const schoolName = schoolInfo?.name ?? "";
+
           await tx.notificationOutbox.createMany({
-            data: absenteesWithPhone.map((r) => ({
-              studentUserId: r.studentUserId,
-              recipientPhone: r.guardianPhone!,
-              eventType: "ABSENCE",
-              messageBody: `ولی محترم، فرزند شما ${r.studentFirstName} ${r.studentLastName} امروز (${today}) در کلاس ${slot.subject.title} غیبت داشت.`,
-              status: "DRAFT",
-            })),
+            data: absenteesWithPhone.map((r) => {
+              const studentName = `${r.studentFirstName} ${r.studentLastName}`;
+              return {
+                studentUserId: r.studentUserId,
+                recipientPhone: r.guardianPhone!,
+                eventType: "ABSENCE",
+                messageBody: `ولی محترم، فرزند شما ${studentName} امروز (${todayFa}) در کلاس ${slot.subject.title} غیبت داشت.`,
+                // Structured metadata for the Arta Payamak pattern API:
+                //   text = "studentName;date;subject;schoolName"
+                metadataJson: JSON.stringify({
+                  studentName,
+                  date: todayFa,
+                  subject: slot.subject.title,
+                  schoolName,
+                }),
+                status: "DRAFT",
+              };
+            }),
           });
         }
 

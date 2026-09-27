@@ -76,7 +76,13 @@ export async function POST(req: NextRequest) {
   return withTenantContext(req, ["DEPUTY"], async () => {
     const drafts = await db.notificationOutbox.findMany({
       where: { id: { in: body.ids }, status: "DRAFT" },
-      select: { id: true, recipientPhone: true, messageBody: true, studentUserId: true },
+      select: {
+        id: true,
+        recipientPhone: true,
+        messageBody: true,
+        studentUserId: true,
+        metadataJson: true,  // ← structured pattern variables (Phase 5.1)
+      },
     });
 
     if (drafts.length === 0) {
@@ -113,18 +119,42 @@ export async function POST(req: NextRequest) {
     // a plain detached Promise works perfectly.
     //
     // The SMS provider is selected automatically via `getSmsProvider()`:
-    //   - If ARTA_PAYAMAK_API_KEY is set → calls the real Arta Payamak API
+    //   - If ARTA_USERNAME is set → calls the real Arta Payamak Pattern API
     //   - Otherwise → simulated (500ms delay + console log)
+    //
+    // Per Phase 5.1: we call `sendAbsenceAlert()` (not `send()`) with the
+    // 4 structured pattern variables parsed from `metadataJson`.
     const smsProvider = getSmsProvider();
     const schoolIdForBg = schoolId;
     void Promise.resolve().then(async () => {
       for (const draft of drafts) {
         try {
-          // Send via the active SMS provider (simulated or Arta Payamak).
-          // The provider handles timeouts, retries, and error normalization.
-          const result = await smsProvider.send(
+          // Parse the structured metadata for the pattern API.
+          // Falls back to DB fetch if metadataJson is missing (old records).
+          let alertData: {
+            studentName: string;
+            date: string;
+            subject: string;
+            schoolName: string;
+          };
+
+          if (draft.metadataJson) {
+            try {
+              alertData = JSON.parse(draft.metadataJson);
+            } catch {
+              alertData = await fetchAbsenceData(draft.id, draft.studentUserId);
+            }
+          } else {
+            alertData = await fetchAbsenceData(draft.id, draft.studentUserId);
+          }
+
+          // Send via the active SMS provider's absence pattern.
+          const result = await smsProvider.sendAbsenceAlert(
             draft.recipientPhone,
-            draft.messageBody
+            alertData.studentName,
+            alertData.date,
+            alertData.subject,
+            alertData.schoolName
           );
 
           if (!result.success) {
@@ -165,4 +195,31 @@ export async function POST(req: NextRequest) {
 
     return response;
   });
+}
+
+/**
+ * Fallback: fetch absence data from the DB when metadataJson is missing.
+ * Used for records created before Phase 5.1 (backward compatibility).
+ */
+async function fetchAbsenceData(
+  outboxId: string,
+  studentUserId: string
+): Promise<{ studentName: string; date: string; subject: string; schoolName: string }> {
+  const outbox = await db.notificationOutbox.findUnique({
+    where: { id: outboxId },
+    select: {
+      student: { select: { firstName: true, lastName: true } },
+      school: { select: { name: true } },
+      createdAt: true,
+    },
+  });
+  if (!outbox) {
+    return { studentName: "دانش‌آموز", date: "", subject: "", schoolName: "" };
+  }
+  return {
+    studentName: `${outbox.student.firstName} ${outbox.student.lastName}`,
+    date: outbox.createdAt.toLocaleDateString("fa-IR"),
+    subject: "", // Can't easily reconstruct without the slot — metadata preferred
+    schoolName: outbox.school.name,
+  };
 }

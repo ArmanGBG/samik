@@ -78,7 +78,9 @@ export function issueOtp(phone: string): { code: string | null; expiresInMs: num
   });
 
   return {
-    code: process.env.NODE_ENV === "development" ? code : null,
+    // Phase 5.1: always return the code so the route can send it via SMS.
+    // The route decides whether to expose it to the client (dev only).
+    code,
     expiresInMs: OTP_TTL_MS,
   };
 }
