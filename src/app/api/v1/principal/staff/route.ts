@@ -231,3 +231,149 @@ export async function DELETE(req: NextRequest) {
     return NextResponse.json({ ok: true });
   });
 }
+
+const PatchStaffBody = z.object({
+  firstName: z.string().min(1).optional(),
+  lastName: z.string().min(1).optional(),
+  phoneNumber: z.string().regex(/^09\d{9}$/).optional(),
+  nationalCode: z.string().regex(/^\d{10}$/).optional(),
+  role: z.enum(["DEPUTY", "TEACHER"]).optional(),
+});
+
+/**
+ * PATCH /api/v1/principal/staff?id=...
+ *
+ * Update a staff member's info (name, phone, national code) and/or
+ * their role within this school.
+ *
+ * - Cannot change a PRINCIPAL's role (only the SuperAdmin can do that
+ *   during onboarding).
+ * - If changing the phone number, the new number must not already
+ *   belong to another user (unique constraint).
+ * - Uses safeJsonResponse pattern — every return is NextResponse.json().
+ */
+export async function PATCH(req: NextRequest) {
+  return withTenantContext(req, ["PRINCIPAL"], async () => {
+    const id = req.nextUrl.searchParams.get("id");
+    if (!id) {
+      return NextResponse.json(
+        { ok: false, error: "پارامتر id الزامی است." },
+        { status: 400 }
+      );
+    }
+
+    let body: z.infer<typeof PatchStaffBody>;
+    try {
+      body = PatchStaffBody.parse(await req.json());
+    } catch (e) {
+      return NextResponse.json(
+        { ok: false, error: (e as z.ZodError).errors?.[0]?.message ?? "ورودی نامعتبر" },
+        { status: 400 }
+      );
+    }
+
+    try {
+      // Find the employment record
+      const employment = await db.staffEmployment.findUnique({
+        where: { id },
+        select: { id: true, role: true, userId: true },
+      });
+      if (!employment) {
+        return NextResponse.json(
+          { ok: false, error: "عضویت پرسنلی یافت نشد." },
+          { status: 404 }
+        );
+      }
+
+      // Cannot change a PRINCIPAL's role
+      if (body.role && employment.role === "PRINCIPAL") {
+        return NextResponse.json(
+          { ok: false, error: "امکان تغییر نقش مدیر مدرسه وجود ندارد." },
+          { status: 403 }
+        );
+      }
+
+      // If phone is changing, check for conflicts
+      if (body.phoneNumber) {
+        const existingUser = await db.user.findUnique({
+          where: { phoneNumber: body.phoneNumber },
+          select: { id: true },
+        });
+        if (existingUser && existingUser.id !== employment.userId) {
+          return NextResponse.json(
+            { ok: false, error: "این شماره موبایل قبلاً برای کاربر دیگری ثبت شده است." },
+            { status: 409 }
+          );
+        }
+      }
+
+      // If nationalCode is changing, check for conflicts
+      if (body.nationalCode) {
+        const existingNc = await db.user.findUnique({
+          where: { nationalCode: body.nationalCode },
+          select: { id: true },
+        });
+        if (existingNc && existingNc.id !== employment.userId) {
+          return NextResponse.json(
+            { ok: false, error: "این کد ملی قبلاً برای کاربر دیگری ثبت شده است." },
+            { status: 409 }
+          );
+        }
+      }
+
+      // Update the User record (name, phone, national code)
+      const userUpdate: Record<string, unknown> = {};
+      if (body.firstName) userUpdate.firstName = body.firstName;
+      if (body.lastName) userUpdate.lastName = body.lastName;
+      if (body.phoneNumber) userUpdate.phoneNumber = body.phoneNumber;
+      if (body.nationalCode) userUpdate.nationalCode = body.nationalCode;
+
+      if (Object.keys(userUpdate).length > 0) {
+        await db.user.update({
+          where: { id: employment.userId },
+          data: userUpdate,
+        });
+      }
+
+      // Update the employment role (if provided and not PRINCIPAL)
+      if (body.role && employment.role !== "PRINCIPAL") {
+        await db.staffEmployment.update({
+          where: { id },
+          data: { role: body.role },
+        });
+      }
+
+      // Fetch the updated record for response
+      const updated = await db.staffEmployment.findUnique({
+        where: { id },
+        include: {
+          user: {
+            select: { id: true, firstName: true, lastName: true, phoneNumber: true, nationalCode: true },
+          },
+        },
+      });
+
+      return NextResponse.json({
+        ok: true,
+        staff: {
+          id: updated!.id,
+          userId: updated!.user.id,
+          firstName: updated!.user.firstName,
+          lastName: updated!.user.lastName,
+          fullName: `${updated!.user.firstName} ${updated!.user.lastName}`,
+          phoneNumber: updated!.user.phoneNumber,
+          nationalCode: updated!.user.nationalCode,
+          role: updated!.role,
+          slotCount: 0, // recalculated on next GET
+          createdAt: updated!.createdAt,
+        },
+      });
+    } catch (err) {
+      console.error("[staff PATCH] error:", err);
+      return NextResponse.json(
+        { ok: false, error: "خطا در ویرایش پرسنل." },
+        { status: 500 }
+      );
+    }
+  });
+}
