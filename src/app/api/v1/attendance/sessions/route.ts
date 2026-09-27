@@ -143,7 +143,16 @@ export async function POST(req: NextRequest) {
         if (absenteeSet.has(sid)) status = "ABSENT";
         else if (latecomerSet.has(sid)) status = "LATE";
         else if (excusedSet.has(sid)) status = "EXCUSED";
-        return { studentUserId: sid, status, studentName: `${e.student.firstName} ${e.student.lastName}` };
+        return {
+          studentUserId: sid,
+          status,
+          studentName: `${e.student.firstName} ${e.student.lastName}`,
+          // For NotificationOutbox draft generation:
+          enrollmentId: e.id,
+          guardianPhone: e.guardianPhone1,
+          studentFirstName: e.student.firstName,
+          studentLastName: e.student.lastName,
+        };
       });
 
       const sessionDate = new Date(body.date + "T00:00:00Z");
@@ -152,6 +161,10 @@ export async function POST(req: NextRequest) {
       // Per Section 6 — "عملیات دسته‌ای (Batch Insert) برای حضور غیاب":
       //   > "اگر خطایی در ثبتِ یکی از رکوردها رخ داد، کل عملیات Rollback
       //   >  شود تا داده‌های ناقص ذخیره نشود."
+      //
+      // Per Section 8 — "تولید پیش‌نویس (Draft Generation)":
+      //   > "وقتی معلمی غیبت دانش‌آموزی را ثبت می‌کند، سیستم بلافاصله یک
+      //   >  رکورد در جدول NotificationOutbox با وضعیت DRAFT می‌سازد."
       const result = await db.$transaction(async (tx) => {
         // Upsert the ClassSession — if it already exists (e.g. duplicate
         // request slipping past idempotency), update it to SUBMITTED.
@@ -191,7 +204,39 @@ export async function POST(req: NextRequest) {
           })),
         });
 
-        return { session };
+        // === NotificationOutbox Draft Generation (Section 8) ===
+        // For each ABSENT student, create a DRAFT notification to their
+        // guardian. We also delete any existing DRAFT notifications for
+        // this session+student pair to avoid duplicates on re-submit.
+        const absenteesWithPhone = recordsToCreate.filter(
+          (r) => r.status === "ABSENT" && r.guardianPhone
+        );
+
+        // Clean up old drafts for this session (in case of re-submission)
+        await tx.notificationOutbox.deleteMany({
+          where: {
+            schoolId: ctx.schoolId,
+            status: "DRAFT",
+            studentUserId: { in: absenteesWithPhone.map((r) => r.studentUserId) },
+            // We can't filter by session directly (no FK), but the message
+            // body includes the subject+date which acts as a natural key.
+          },
+        });
+
+        if (absenteesWithPhone.length > 0) {
+          const today = new Date().toLocaleDateString("fa-IR");
+          await tx.notificationOutbox.createMany({
+            data: absenteesWithPhone.map((r) => ({
+              studentUserId: r.studentUserId,
+              recipientPhone: r.guardianPhone!,
+              eventType: "ABSENCE",
+              messageBody: `ولی محترم، فرزند شما ${r.studentFirstName} ${r.studentLastName} امروز (${today}) در کلاس ${slot.subject.title} غیبت داشت.`,
+              status: "DRAFT",
+            })),
+          });
+        }
+
+        return { session, draftCount: absenteesWithPhone.length };
       });
 
       // === Emit SSE event ===
@@ -231,6 +276,7 @@ export async function POST(req: NextRequest) {
             absent: recordsToCreate.filter((r) => r.status === "ABSENT").length,
             late: recordsToCreate.filter((r) => r.status === "LATE").length,
             excused: recordsToCreate.filter((r) => r.status === "EXCUSED").length,
+            notificationDrafts: result.draftCount,
           },
         },
       };

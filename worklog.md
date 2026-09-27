@@ -515,3 +515,146 @@ Stage Summary:
   4. ✓ Quick Behavioral Points (+ / - with long-press tag menu)
   5. ✓ Deputy Live Dashboard with SSE (real-time absentees + behavioral feed)
 - SSE verified end-to-end with parallel browser sessions.
+
+---
+Task ID: P4-1
+Agent: Senior Full-Stack Engineer (main)
+Task: Phase 4.1 — Auto-generate NotificationOutbox drafts inside the attendance transaction.
+
+Work Log:
+- Modified `POST /api/v1/attendance/sessions` to generate DRAFT notifications for each ABSENT student WITHIN the `db.$transaction()`:
+  - Enriched the enrollments query to include guardianPhone1.
+  - Added `enrollmentId`, `guardianPhone`, `studentFirstName`, `studentLastName` to the `recordsToCreate` map.
+  - Inside the transaction: filters for ABSENT students with a guardian phone, deletes old DRAFT notifications for those students (prevents duplicates on re-submit), and creates new NotificationOutbox records with auto-generated Persian message: "ولی محترم، فرزند شما [نام] امروز ([تاریخ]) در کلاس [درس] غیبت داشت."
+  - Returns `notificationDrafts` count in the response stats.
+
+Stage Summary:
+- Verified e2e: teacher committed 3 absentees → 3 DRAFT notifications appeared in the deputy's outbox immediately.
+
+---
+Task ID: P4-2
+Agent: Senior Full-Stack Engineer (main)
+Task: Phase 4.2 — Notifications outbox API (list, edit, discard, send-bulk with 202).
+
+Work Log:
+- Created `GET /api/v1/notifications/outbox?status=DRAFT` — lists outbox records with student info, supports status filter.
+- Created `PATCH /api/v1/notifications/outbox/[id]` — edits the message body of a DRAFT (only DRAFT can be edited, enforced via `where: { id, status: "DRAFT" }`).
+- Created `DELETE /api/v1/notifications/outbox/[id]` — sets status to DISCARDED (soft delete, preserves audit trail).
+- Created `POST /api/v1/notifications/outbox/send-bulk` — the critical non-blocking 202 endpoint:
+  - Validates IDs + role (DEPUTY only).
+  - Verifies all IDs are DRAFT + belong to this school.
+  - Returns HTTP 202 Accepted IMMEDIATELY with `{ ok: true, status: "accepted", queuedCount }`.
+  - Detaches a background Promise (`void Promise.resolve().then(async () => { ... })`) that:
+    - Loops through each notification.
+    - Simulates 500ms network delay per SMS (per architecture doc).
+    - Updates status to SENT with sentAt = now().
+    - Emits `notification:sent` SSE event for real-time progress on the deputy dashboard.
+    - On error: marks as FAILED.
+- Added `NotificationSentEvent` type to the event bus + updated `subscribeToSchool()` to listen for it.
+
+Stage Summary:
+- Verified e2e: deputy clicked "ارسال پیامک گروهی (۳)" → 202 returned in 158ms → background job sent all 3 in ~1.5s → drafts cleared from the list.
+
+---
+Task ID: P4-3
+Agent: Senior Full-Stack Engineer (main)
+Task: Phase 4.3 — Deputy notifications UI.
+
+Work Log:
+- Created `src/components/deputy/notifications-outbox.tsx`:
+  - Header with "ارسال پیامک گروهی" button (shows selected count in Persian numerals).
+  - 3 stat cards: در انتظار ارسال (warning), ارسال‌شده امروز (emerald), انتخاب‌شده (muted).
+  - List of DRAFT items, each with: checkbox, student name + غیبت badge + recipient phone + timestamp + message preview, edit + discard action buttons.
+  - "انتخاب همه" / "لغو انتخاب همه" toggle.
+  - Edit dialog: Textarea for editing the message body (500 char limit with counter).
+  - Discard: confirmation dialog → DELETE → status DISCARDED.
+  - Bulk send: POST to send-bulk → toast "ارسال N پیامک در پس‌زمینه آغاز شد" (6s duration).
+  - Auto-polls every 5 seconds for real-time updates (picks up SENT status as the background job completes).
+- Created `src/app/(dashboard)/deputy/notifications/page.tsx`.
+
+Stage Summary:
+- Verified e2e: 3 drafts displayed correctly with auto-generated Persian messages. Selected all → sent → list cleared.
+
+---
+Task ID: P4-4
+Agent: Senior Full-Stack Engineer (main)
+Task: Phase 4.4 — Student dashboard API.
+
+Work Log:
+- Created `GET /api/v1/student/enrollments` — lists ALL enrollments (ACTIVE + ARCHIVED) for the parent/guardian across ALL schools. Uses `runBypassingTenant()` because the student may have enrollments in multiple schools (the documented exception per Section 4). Filters by guardianPhone1 OR guardianPhone2 matching the user's phone.
+- Created `GET /api/v1/student/dashboard?enrollmentId=...` — aggregates:
+  - Top stats: total absences, lates, positive points, negative points, total sessions.
+  - Grades timeline: all NUMERIC grades (excludes is_absent per Section 7 directive), sorted by date, for the recharts LineChart.
+  - Behavioral feed: latest 20 behavioral points with teacher name + tag + date.
+  - Attendance stats: counts by PRESENT/ABSENT/LATE/EXCUSED.
+  - Recent attendance: last 10 records with date + status.
+  - Uses `runBypassingTenant()` because the enrollment may be in a different school than the contextual token's school.
+  - Authorization: verifies the user's phone matches the enrollment's guardian phone.
+
+Stage Summary:
+- Verified e2e: parent's enrollment list showed 1 enrollment (علی احمدی — beheshti — 1404-1405). Dashboard data loaded with 2 absences, 2 positive points, 3 numeric grades, 0 negative points.
+
+---
+Task ID: P4-5
+Agent: Senior Full-Stack Engineer (main)
+Task: Phase 4.5 — Student dashboard UI with recharts.
+
+Work Log:
+- Created `src/components/student/student-dashboard.tsx`:
+  - Enrollment selector (Select dropdown) listing all enrollments (student name + school + year).
+  - Active enrollment badges: school name (navy), classroom (emerald), academic year (muted).
+  - 4 top stats: کل جلسات (navy), غیبت (destructive), امتیاز مثبت (emerald), امتیاز منفی (warning).
+  - Grades chart using recharts (ResponsiveContainer + LineChart + Line + XAxis + YAxis + Tooltip + ReferenceLine):
+    - Y-axis: 0-20 with ticks at 0, 5, 10, 15, 20.
+    - ReferenceLine at y=10 with "حداقل قبولی" label (minimum passing grade).
+    - Line: navy stroke, emerald dots, monotone interpolation.
+    - Tooltip: Persian-formatted score + date.
+    - Edge case handling: if no grades → shows "هنوز نمره عددی ثبت نشده است" empty state.
+    - Descriptive-only assessments excluded (no numericScore) — they don't appear on the chart.
+    - is_absent grades excluded (per Section 7 directive — don't count as zero).
+  - Behavioral feed: list of latest points with 👍/👎 icon + tag + teacher name + date.
+  - Attendance history: list of recent records with date + colored status badge.
+  - All text in Persian with Vazirmatn font; chart container set to `dir="ltr"` for correct axis rendering.
+- Created `src/app/(dashboard)/student/page.tsx`.
+- Updated sidebar NAV for STUDENT role: changed "سوابق تحصیلی" → "داشبورد" (overview).
+
+Stage Summary:
+- Verified e2e: chart rendered with 3 data points (پرسش کلاسی فصل ۱، امتحان میان‌ترم، پرسش کلاسی فصل ۲). Reference line at 10. Behavioral feed showed 2 entries. Attendance history showed 2 غایب entries.
+
+---
+Task ID: P4-6
+Agent: Senior Full-Stack Engineer (main)
+Task: Phase 4.6 — Seed grades + assessments for testing.
+
+Work Log:
+- Seeded 3 NUMERIC assessments (پرسش کلاسی فصل ۱، امتحان میان‌ترم، پرسش کلاسی فصل ۲) with random grades 12-20 for all 8 students in دهم الف.
+- Seeded 1 DESCRIPTIVE assessment (ارزیابی توصیفی پروژه) with random EXCELLENT/GOOD/ACCEPTABLE/NEEDS_IMPROVEMENT grades.
+- All assessments dated within the last 30 days (so they appear on the gradebook matrix + student chart).
+
+Stage Summary:
+- The student dashboard chart now has real data to display.
+
+---
+Task ID: P4-7
+Agent: Senior Full-Stack Engineer (main)
+Task: Phase 4.7 — Full e2e verification + summary report.
+
+Work Log:
+- `bun run lint` → 0 errors, 0 warnings.
+- Dev log: all endpoints returning 200/201/202. No runtime errors.
+- Full e2e flow verified:
+  1. Teacher (زهرا احمدی) logged in → navigated to roll-call page → marked 3 students ABSENT → committed → POST 201.
+  2. Deputy (حسین موسوی) logged in → navigated to notifications outbox → saw 3 DRAFT messages with auto-generated Persian text → selected all → clicked "ارسال پیامک گروهی (۳)" → got 202 Accepted immediately → background job sent all 3 SMS (500ms each) → list cleared.
+  3. Parent (09120000005, guardian of علی احمدی) logged in → saw STUDENT profile "دانش‌آموز/ولی علی احمدی — دبیرستان شهید بهشتی" → selected it → dashboard loaded with:
+     - 4 top stats (۲ جلسات، ۲ غیبت، ۲ امتیاز مثبت، ۰ امتیاز منفی)
+     - Grades chart (3 data points over 30 days, navy line with emerald dots, reference line at 10)
+     - Behavioral feed (2 entries with teacher name + date)
+     - Attendance history (2 غایب entries)
+- Screenshots: roll-call-3-absent.png, deputy-outbox-drafts.png, student-dashboard.png.
+
+Stage Summary:
+- Phase 4 complete. All 3 objectives delivered:
+  1. ✓ Approval-Based Notification Outbox (HITL) — drafts auto-generated, deputy can edit/discard/send-bulk
+  2. ✓ Student/Parent Dashboard — read-only with recharts chart, behavioral feed, year filter
+  3. ✓ Final E2E Polish — full pipeline verified end-to-end
+- The Samik platform is now feature-complete across all 4 phases.

@@ -63,7 +63,20 @@ export interface BehavioralPointCreatedEvent {
   };
 }
 
-export type SamikEvent = AttendanceSubmittedEvent | BehavioralPointCreatedEvent;
+export interface NotificationSentEvent {
+  type: "notification:sent";
+  schoolId: string;
+  payload: {
+    id: string;
+    recipientPhone: string;
+    studentId: string;
+  };
+}
+
+export type SamikEvent =
+  | AttendanceSubmittedEvent
+  | BehavioralPointCreatedEvent
+  | NotificationSentEvent;
 
 const _g = globalThis as unknown as { __samikEventBus?: EventEmitter };
 if (!_g.__samikEventBus) {
@@ -110,13 +123,16 @@ export function subscribeToSchool(
 ): () => void {
   const attendanceEvent = `attendance:submitted:${schoolId}`;
   const behavioralEvent = `behavioral-point:created:${schoolId}`;
+  const notificationEvent = `notification:sent:${schoolId}`;
 
   const wrapped = (event: SamikEvent) => listener(event);
   eventBus.on(attendanceEvent, wrapped);
   eventBus.on(behavioralEvent, wrapped);
+  eventBus.on(notificationEvent, wrapped);
 
   return () => {
     eventBus.off(attendanceEvent, wrapped);
     eventBus.off(behavioralEvent, wrapped);
+    eventBus.off(notificationEvent, wrapped);
   };
 }

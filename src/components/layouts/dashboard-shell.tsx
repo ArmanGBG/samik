@@ -69,7 +69,7 @@ const NAV: NavItem[] = [
   { href: "attendance", label: "حضور و غیاب کلاس", icon: ClipboardCheck, roles: ["TEACHER"] },
   { href: "gradebook", label: "دفتر نمره", icon: BookOpen, roles: ["TEACHER"] },
   // Student
-  { href: "records", label: "سوابق تحصیلی", icon: BookOpen, roles: ["STUDENT"] },
+  { href: "", label: "داشبورد", icon: LayoutDashboard, roles: ["STUDENT"] },
 ];
 
 const ROLE_LABEL: Record<string, string> = {
