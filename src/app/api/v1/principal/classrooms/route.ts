@@ -3,14 +3,24 @@ import { z } from "zod";
 import { withTenantContext } from "@/lib/middleware-helpers/tenant-guard";
 import { db } from "@/lib/db";
 
+const MajorEnum = z.enum([
+  "MATHEMATICS",
+  "EXPERIMENTAL",
+  "HUMANITIES",
+  "TECHNICAL",
+  "VOCATIONAL",
+]);
+
 const CreateBody = z.object({
   gradeLevel: z.string().min(1, "پایه الزامی است."),
   name: z.string().min(1, "نام کلاس الزامی است."),
+  major: MajorEnum.nullable().optional(),
 });
 
 const UpdateBody = z.object({
   gradeLevel: z.string().min(1).optional(),
   name: z.string().min(1).optional(),
+  major: MajorEnum.nullable().optional(),
 });
 
 /**
@@ -40,6 +50,7 @@ export async function GET(req: NextRequest) {
       classrooms: rooms.map((r) => ({
         id: r.id,
         gradeLevel: r.gradeLevel,
+        major: r.major,
         name: r.name,
         createdAt: r.createdAt,
         studentCount: r._count.enrollments,
@@ -83,7 +94,11 @@ export async function POST(req: NextRequest) {
     }
 
     const room = await db.classRoom.create({
-      data: { gradeLevel: body.gradeLevel, name: body.name },
+      data: {
+        gradeLevel: body.gradeLevel,
+        name: body.name,
+        major: body.major ?? null,
+      },
     });
     return NextResponse.json({ ok: true, classroom: room }, { status: 201 });
   });

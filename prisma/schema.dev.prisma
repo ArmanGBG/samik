@@ -175,6 +175,13 @@ model ClassRoom {
   id         String    @id @default(uuid())
   schoolId   String
   gradeLevel String
+  /**
+   * Major (رشته) — only for high school grades (10-12).
+   * Nullable for elementary/middle school (grades 1-9).
+   * Values: "MATHEMATICS" | "EXPERIMENTAL" | "HUMANITIES" | "TECHNICAL" | "VOCATIONAL"
+   * (Persian: ریاضی، تجربی، انسانی، فنی حرفه‌ای، کاردانش)
+   */
+  major      String?
   name       String
   deletedAt  DateTime?
   createdAt  DateTime  @default(now())

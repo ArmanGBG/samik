@@ -7,7 +7,6 @@ import { Label } from "@/components/ui/label";
 import {
   Card,
   CardContent,
-  CardDescription,
   CardFooter,
   CardHeader,
   CardTitle,
@@ -20,6 +19,20 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import {
   Tooltip,
@@ -33,6 +46,7 @@ import {
   Plus,
   DoorClosed,
   Trash2,
+  Pencil,
   ChevronUp,
   ChevronDown,
   ChevronsUpDown,
@@ -40,10 +54,17 @@ import {
 import { cn } from "@/lib/utils";
 import { PageHeader } from "@/components/shared/page-header";
 import { EmptyState } from "@/components/shared/empty-state";
+import {
+  GRADES,
+  MAJORS,
+  gradeHasMajor,
+  getMajorShort,
+} from "@/lib/constants/grades";
 
 interface ClassRoom {
   id: string;
   gradeLevel: string;
+  major: string | null;
   name: string;
   createdAt: string;
   studentCount: number;
@@ -51,16 +72,36 @@ interface ClassRoom {
   assessmentCount: number;
 }
 
-type SortKey = "gradeLevel" | "name" | "studentCount" | "slotCount" | "assessmentCount";
+type SortKey = "gradeLevel" | "name" | "major" | "studentCount" | "slotCount" | "assessmentCount";
 type SortDir = "asc" | "desc";
+
+const MAJOR_TINT: Record<string, string> = {
+  MATHEMATICS: "bg-navy/10 text-navy border-navy/30",
+  EXPERIMENTAL: "bg-emerald/10 text-emerald border-emerald/30",
+  HUMANITIES: "bg-info/10 text-info border-info/30",
+  TECHNICAL: "bg-warning/10 text-warning border-warning/30",
+  VOCATIONAL: "bg-purple-100 text-purple-700 border-purple-300",
+};
 
 export function ClassRoomsManager() {
   const [rooms, setRooms] = useState<ClassRoom[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
-  const [form, setForm] = useState({ gradeLevel: "", name: "" });
   const [sortKey, setSortKey] = useState<SortKey>("gradeLevel");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
+  const [form, setForm] = useState<{ gradeLevel: string; major: string; name: string }>({
+    gradeLevel: "",
+    major: "",
+    name: "",
+  });
+  // Edit dialog state
+  const [editing, setEditing] = useState<ClassRoom | null>(null);
+  const [editForm, setEditForm] = useState<{ gradeLevel: string; major: string; name: string }>({
+    gradeLevel: "",
+    major: "",
+    name: "",
+  });
+  const [editSubmitting, setEditSubmitting] = useState(false);
 
   async function load() {
     setLoading(true);
@@ -77,32 +118,136 @@ export function ClassRoomsManager() {
     load();
   }, []);
 
+  // Reset major when grade changes to a non-high-school grade
+  useEffect(() => {
+    if (!gradeHasMajor(form.gradeLevel)) {
+      setForm((f) => ({ ...f, major: "" }));
+    }
+  }, [form.gradeLevel]);
+
+  const sortedRooms = useMemo(() => {
+    const sorted = [...rooms];
+    sorted.sort((a, b) => {
+      let cmp = 0;
+      let av: string | number, bv: string | number;
+      switch (sortKey) {
+        case "gradeLevel":
+          av = GRADES.find((g) => g.value === a.gradeLevel)?.number ?? 99;
+          bv = GRADES.find((g) => g.value === b.gradeLevel)?.number ?? 99;
+          cmp = av - bv;
+          break;
+        case "name":
+          cmp = a.name.localeCompare(b.name, "fa");
+          break;
+        case "major":
+          cmp = (a.major ?? "").localeCompare(b.major ?? "");
+          break;
+        case "studentCount":
+          cmp = a.studentCount - b.studentCount;
+          break;
+        case "slotCount":
+          cmp = a.slotCount - b.slotCount;
+          break;
+        case "assessmentCount":
+          cmp = a.assessmentCount - b.assessmentCount;
+          break;
+      }
+      return sortDir === "asc" ? cmp : -cmp;
+    });
+    return sorted;
+  }, [rooms, sortKey, sortDir]);
+
+  function toggleSort(key: SortKey) {
+    if (sortKey === key) {
+      setSortDir(sortDir === "asc" ? "desc" : "asc");
+    } else {
+      setSortKey(key);
+      setSortDir("asc");
+    }
+  }
+
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
     setSubmitting(true);
     try {
+      const payload: Record<string, unknown> = {
+        gradeLevel: form.gradeLevel,
+        name: form.name,
+      };
+      // Only send major if the grade supports it
+      if (gradeHasMajor(form.gradeLevel) && form.major) {
+        payload.major = form.major;
+      } else {
+        payload.major = null;
+      }
       const r = await fetch("/api/v1/principal/classrooms", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
+        body: JSON.stringify(payload),
       });
       const d = await r.json();
       if (!d.ok) {
         toast.error(d.error ?? "ثبت کلاس ناموفق بود.");
         return;
       }
-      toast.success(`کلاس ${form.gradeLevel} ${form.name} ثبت شد.`);
-      setForm({ gradeLevel: "", name: "" });
+      const majorLabel = form.major ? ` (${getMajorShort(form.major)})` : "";
+      toast.success(`کلاس ${form.gradeLevel} ${form.name}${majorLabel} ثبت شد.`);
+      setForm({ gradeLevel: "", major: "", name: "" });
       load();
     } finally {
       setSubmitting(false);
     }
   }
 
+  function openEdit(room: ClassRoom) {
+    setEditing(room);
+    setEditForm({
+      gradeLevel: room.gradeLevel,
+      major: room.major ?? "",
+      name: room.name,
+    });
+  }
+
+  // Reset edit major when edit grade changes
+  useEffect(() => {
+    if (editing && !gradeHasMajor(editForm.gradeLevel)) {
+      setEditForm((f) => ({ ...f, major: "" }));
+    }
+  }, [editForm.gradeLevel, editing]);
+
+  async function saveEdit() {
+    if (!editing) return;
+    setEditSubmitting(true);
+    try {
+      const payload: Record<string, unknown> = {
+        gradeLevel: editForm.gradeLevel,
+        name: editForm.name,
+      };
+      if (gradeHasMajor(editForm.gradeLevel) && editForm.major) {
+        payload.major = editForm.major;
+      } else {
+        payload.major = null;
+      }
+      const r = await fetch(`/api/v1/principal/classrooms?id=${editing.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const d = await r.json();
+      if (!d.ok) {
+        toast.error(d.error ?? "ویرایش ناموفق بود.");
+        return;
+      }
+      toast.success("کلاس ویرایش شد.");
+      setEditing(null);
+      load();
+    } finally {
+      setEditSubmitting(false);
+    }
+  }
+
   async function onDelete(id: string, label: string) {
-    if (
-      !confirm(`حذف کلاس «${label}»؟ این عملیات نرم است و سوابق حفظ می‌شوند.`)
-    )
+    if (!confirm(`حذف کلاس «${label}»؟ این عملیات نرم است و سوابق حفظ می‌شوند.`))
       return;
     const r = await fetch(`/api/v1/principal/classrooms?id=${id}`, {
       method: "DELETE",
@@ -116,49 +261,8 @@ export function ClassRoomsManager() {
     load();
   }
 
-  function toggleSort(key: SortKey) {
-    if (sortKey === key) {
-      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
-    } else {
-      setSortKey(key);
-      setSortDir("asc");
-    }
-  }
-
-  const sortedRooms = useMemo(() => {
-    const arr = [...rooms];
-    arr.sort((a, b) => {
-      let av: string | number;
-      let bv: string | number;
-      switch (sortKey) {
-        case "name":
-          av = a.name;
-          bv = b.name;
-          break;
-        case "studentCount":
-          av = a.studentCount;
-          bv = b.studentCount;
-          break;
-        case "slotCount":
-          av = a.slotCount;
-          bv = b.slotCount;
-          break;
-        case "assessmentCount":
-          av = a.assessmentCount;
-          bv = b.assessmentCount;
-          break;
-        case "gradeLevel":
-        default:
-          av = a.gradeLevel;
-          bv = b.gradeLevel;
-          break;
-      }
-      if (av < bv) return sortDir === "asc" ? -1 : 1;
-      if (av > bv) return sortDir === "asc" ? 1 : -1;
-      return 0;
-    });
-    return arr;
-  }, [rooms, sortKey, sortDir]);
+  const showMajorInForm = gradeHasMajor(form.gradeLevel);
+  const showMajorInEdit = gradeHasMajor(editForm.gradeLevel);
 
   return (
     <div className="max-w-6xl mx-auto space-y-6">
@@ -168,42 +272,58 @@ export function ClassRoomsManager() {
         icon={DoorClosed}
       />
 
+      {/* Create form */}
       <Card>
         <CardHeader>
           <CardTitle className="text-base text-navy flex items-center gap-2">
             <Plus className="h-4 w-4" />
             کلاس جدید
           </CardTitle>
-          <CardDescription>
-            پایه و نام کلاس را وارد کنید. نام کلاس حداکثر ۵ نویسه است.
-          </CardDescription>
         </CardHeader>
         <form onSubmit={onSubmit}>
-          <CardContent className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="space-y-2">
+          <CardContent className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="space-y-1.5">
               <Label htmlFor="grade" className="text-xs font-medium">
                 پایه
               </Label>
-              <Input
-                id="grade"
+              <Select
                 value={form.gradeLevel}
-                onChange={(e) =>
-                  setForm({ ...form, gradeLevel: e.target.value })
-                }
-                placeholder="دهم"
-                list="grades"
-                required
-              />
-              <datalist id="grades">
-                <option value="هفتم" />
-                <option value="هشتم" />
-                <option value="نهم" />
-                <option value="دهم" />
-                <option value="یازدهم" />
-                <option value="دوازدهم" />
-              </datalist>
+                onValueChange={(v) => setForm({ ...form, gradeLevel: v })}
+              >
+                <SelectTrigger id="grade" className="h-9">
+                  <SelectValue placeholder="انتخاب پایه..." />
+                </SelectTrigger>
+                <SelectContent className="max-h-72">
+                  {GRADES.map((g) => (
+                    <SelectItem key={g.value} value={g.value}>
+                      {g.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
-            <div className="space-y-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="major" className="text-xs font-medium">
+                رشته {showMajorInForm ? "" : "(غیرقابل انتخاب)"}
+              </Label>
+              <Select
+                value={form.major}
+                onValueChange={(v) => setForm({ ...form, major: v })}
+                disabled={!showMajorInForm}
+              >
+                <SelectTrigger id="major" className="h-9">
+                  <SelectValue placeholder="—" />
+                </SelectTrigger>
+                <SelectContent>
+                  {MAJORS.map((m) => (
+                    <SelectItem key={m.value} value={m.value}>
+                      {m.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
               <Label htmlFor="name" className="text-xs font-medium">
                 نام کلاس
               </Label>
@@ -213,45 +333,37 @@ export function ClassRoomsManager() {
                 onChange={(e) => setForm({ ...form, name: e.target.value })}
                 placeholder="الف"
                 maxLength={5}
+                className="h-9"
                 required
               />
-              <p className="text-xs text-muted-foreground tabular-nums">
-                {form.name.length.toLocaleString("fa-IR")} / ۵ نویسه
-              </p>
+            </div>
+            <div className="flex items-end">
+              <Button
+                type="submit"
+                disabled={submitting || !form.gradeLevel || !form.name}
+                className="w-full bg-emerald hover:bg-emerald-dark h-9 gap-2"
+              >
+                {submitting ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Plus className="h-4 w-4" />
+                )}
+                ثبت کلاس
+              </Button>
             </div>
           </CardContent>
-          <CardFooter>
-            <Button
-              type="submit"
-              disabled={submitting || !form.gradeLevel || !form.name}
-              className="bg-emerald hover:bg-emerald-dark cursor-pointer"
-            >
-              {submitting ? (
-                <>
-                  <Loader2 className="ml-2 h-4 w-4 animate-spin" />
-                  در حال ثبت...
-                </>
-              ) : (
-                "ثبت کلاس"
-              )}
-            </Button>
-          </CardFooter>
+          <CardFooter />
         </form>
       </Card>
 
+      {/* Table */}
       <Card>
-        <CardHeader>
+        <CardHeader className="pb-3">
           <CardTitle className="text-base text-navy">
-            کلاس‌های ثبت‌شده
-            <span className="text-muted-foreground font-normal mr-2 tabular-nums">
-              ({rooms.length.toLocaleString("fa-IR")})
-            </span>
+            کلاس‌های ثبت‌شده ({rooms.length})
           </CardTitle>
-          <CardDescription>
-            حذف کلاس نرم است — سوابق نمرات و غیبت‌ها حفظ می‌شوند. برای مرتب‌سازی روی عنوان ستون‌ها کلیک کنید.
-          </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="p-0">
           {loading ? (
             <div className="flex justify-center py-10">
               <Loader2 className="h-6 w-6 animate-spin text-navy" />
@@ -259,80 +371,118 @@ export function ClassRoomsManager() {
           ) : rooms.length === 0 ? (
             <EmptyState
               icon={DoorClosed}
-              title="هنوز کلاسی ثبت نشده است."
-              description="با تکمیل فرم بالا، اولین کلاس مدرسه را تعریف کنید."
+              title="هنوز کلاسی ثبت نشده است"
+              description="با فرم بالا کلاس جدید ثبت کنید."
             />
           ) : (
-            <div className="rounded-lg border overflow-hidden">
-              <div className="overflow-x-auto max-h-[28rem]">
-                <Table className="sticky-table-header">
-                  <TableHeader>
-                    <TableRow>
-                      <SortableHead
-                        label="پایه"
-                        active={sortKey === "gradeLevel"}
-                        dir={sortDir}
-                        onClick={() => toggleSort("gradeLevel")}
-                      />
-                      <SortableHead
-                        label="نام کلاس"
-                        active={sortKey === "name"}
-                        dir={sortDir}
-                        onClick={() => toggleSort("name")}
-                      />
-                      <SortableHead
-                        label="دانش‌آموزان"
-                        active={sortKey === "studentCount"}
-                        dir={sortDir}
-                        onClick={() => toggleSort("studentCount")}
-                        className="text-left"
-                      />
-                      <SortableHead
-                        label="برنامه هفتگی"
-                        active={sortKey === "slotCount"}
-                        dir={sortDir}
-                        onClick={() => toggleSort("slotCount")}
-                        className="text-left"
-                      />
-                      <SortableHead
-                        label="ارزیابی‌ها"
-                        active={sortKey === "assessmentCount"}
-                        dir={sortDir}
-                        onClick={() => toggleSort("assessmentCount")}
-                        className="text-left"
-                      />
-                      <TableHead className="text-left">عملیات</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {sortedRooms.map((r, i) => (
-                      <TableRow
-                        key={r.id}
-                        className="data-table-row stagger-item"
-                        style={{ animationDelay: `${i * 30}ms` }}
-                      >
-                        <TableCell className="font-medium">
-                          {r.gradeLevel}
-                        </TableCell>
-                        <TableCell>
+            <div className="overflow-x-auto max-h-[28rem] overflow-y-auto sticky-table-header">
+              <Table>
+                <TableHeader>
+                  <TableRow className="hover:bg-transparent">
+                    <SortableHead
+                      label="پایه"
+                      sortKey="gradeLevel"
+                      currentKey={sortKey}
+                      dir={sortDir}
+                      onClick={() => toggleSort("gradeLevel")}
+                    />
+                    <SortableHead
+                      label="رشته"
+                      sortKey="major"
+                      currentKey={sortKey}
+                      dir={sortDir}
+                      onClick={() => toggleSort("major")}
+                      className="text-center"
+                    />
+                    <SortableHead
+                      label="نام کلاس"
+                      sortKey="name"
+                      currentKey={sortKey}
+                      dir={sortDir}
+                      onClick={() => toggleSort("name")}
+                    />
+                    <SortableHead
+                      label="دانش‌آموزان"
+                      sortKey="studentCount"
+                      currentKey={sortKey}
+                      dir={sortDir}
+                      onClick={() => toggleSort("studentCount")}
+                      className="text-center"
+                    />
+                    <SortableHead
+                      label="برنامه هفتگی"
+                      sortKey="slotCount"
+                      currentKey={sortKey}
+                      dir={sortDir}
+                      onClick={() => toggleSort("slotCount")}
+                      className="text-center"
+                    />
+                    <SortableHead
+                      label="ارزیابی‌ها"
+                      sortKey="assessmentCount"
+                      currentKey={sortKey}
+                      dir={sortDir}
+                      onClick={() => toggleSort("assessmentCount")}
+                      className="text-center"
+                    />
+                    <TableHead className="text-center w-20">عملیات</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {sortedRooms.map((r, i) => (
+                    <TableRow
+                      key={r.id}
+                      className="data-table-row stagger-item"
+                      style={{ animationDelay: `${i * 30}ms` }}
+                    >
+                      <TableCell className="font-medium">{r.gradeLevel}</TableCell>
+                      <TableCell className="text-center">
+                        {r.major ? (
                           <Badge
                             variant="outline"
-                            className="font-mono tabular-nums"
+                            className={cn(
+                              "text-[10px]",
+                              MAJOR_TINT[r.major] ?? "bg-muted"
+                            )}
                           >
-                            {r.name}
+                            {getMajorShort(r.major)}
                           </Badge>
-                        </TableCell>
-                        <TableCell className="tabular-nums">
-                          {r.studentCount.toLocaleString("fa-IR")}
-                        </TableCell>
-                        <TableCell className="tabular-nums">
-                          {r.slotCount.toLocaleString("fa-IR")}
-                        </TableCell>
-                        <TableCell className="tabular-nums">
-                          {r.assessmentCount.toLocaleString("fa-IR")}
-                        </TableCell>
-                        <TableCell>
-                          <TooltipProvider delayDuration={150}>
+                        ) : (
+                          <span className="text-muted-foreground/40 text-xs">—</span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="outline" className="font-mono">
+                          {r.name}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-center tabular-nums">
+                        {r.studentCount.toLocaleString("fa-IR")}
+                      </TableCell>
+                      <TableCell className="text-center tabular-nums">
+                        {r.slotCount.toLocaleString("fa-IR")}
+                      </TableCell>
+                      <TableCell className="text-center tabular-nums">
+                        {r.assessmentCount.toLocaleString("fa-IR")}
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center justify-center gap-1">
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => openEdit(r)}
+                                  className="text-info hover:text-info hover:bg-info/10 h-8 w-8 p-0"
+                                >
+                                  <Pencil className="h-4 w-4" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>ویرایش</TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                          <TooltipProvider>
                             <Tooltip>
                               <TooltipTrigger asChild>
                                 <Button
@@ -341,66 +491,135 @@ export function ClassRoomsManager() {
                                   onClick={() =>
                                     onDelete(r.id, `${r.gradeLevel} ${r.name}`)
                                   }
-                                  className="text-destructive hover:text-destructive hover:bg-destructive/10 cursor-pointer h-8 w-8 p-0"
+                                  className="text-destructive hover:text-destructive hover:bg-destructive/10 h-8 w-8 p-0"
                                 >
                                   <Trash2 className="h-4 w-4" />
                                 </Button>
                               </TooltipTrigger>
-                              <TooltipContent side="top">
-                                حذف کلاس
-                              </TooltipContent>
+                              <TooltipContent>حذف</TooltipContent>
                             </Tooltip>
                           </TooltipProvider>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
             </div>
           )}
         </CardContent>
       </Card>
+
+      {/* Edit dialog */}
+      <Dialog open={!!editing} onOpenChange={(o) => !o && setEditing(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="text-navy">ویرایش کلاس</DialogTitle>
+          </DialogHeader>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 py-2">
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium">پایه</Label>
+              <Select
+                value={editForm.gradeLevel}
+                onValueChange={(v) => setEditForm({ ...editForm, gradeLevel: v })}
+              >
+                <SelectTrigger className="h-9">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="max-h-72">
+                  {GRADES.map((g) => (
+                    <SelectItem key={g.value} value={g.value}>
+                      {g.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium">
+                رشته {showMajorInEdit ? "" : "(غیرقابل انتخاب)"}
+              </Label>
+              <Select
+                value={editForm.major}
+                onValueChange={(v) => setEditForm({ ...editForm, major: v })}
+                disabled={!showMajorInEdit}
+              >
+                <SelectTrigger className="h-9">
+                  <SelectValue placeholder="—" />
+                </SelectTrigger>
+                <SelectContent>
+                  {MAJORS.map((m) => (
+                    <SelectItem key={m.value} value={m.value}>
+                      {m.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5 sm:col-span-2">
+              <Label className="text-xs font-medium">نام کلاس</Label>
+              <Input
+                value={editForm.name}
+                onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                maxLength={5}
+                className="h-9"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditing(null)}>
+              انصراف
+            </Button>
+            <Button
+              onClick={saveEdit}
+              disabled={editSubmitting || !editForm.gradeLevel || !editForm.name}
+              className="bg-emerald hover:bg-emerald-dark gap-2"
+            >
+              {editSubmitting && <Loader2 className="h-4 w-4 animate-spin" />}
+              ذخیره
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
 
-/* ── Sortable Table Header ── */
 function SortableHead({
   label,
-  active,
+  sortKey,
+  currentKey,
   dir,
   onClick,
   className,
 }: {
   label: string;
-  active: boolean;
+  sortKey: SortKey;
+  currentKey: SortKey;
   dir: SortDir;
   onClick: () => void;
   className?: string;
 }) {
-  const Icon = !active
-    ? ChevronsUpDown
-    : dir === "asc"
-      ? ChevronUp
-      : ChevronDown;
+  const isActive = sortKey === currentKey;
   return (
-    <TableHead className={cn("p-0", className)}>
+    <TableHead className={className}>
       <button
-        type="button"
         onClick={onClick}
         className={cn(
-          "flex items-center gap-1.5 px-2 h-10 font-medium cursor-pointer hover:text-navy transition-colors w-full",
-          active && "text-navy"
+          "inline-flex items-center gap-1 hover:text-navy transition-colors",
+          isActive && "text-navy"
         )}
       >
-        <span>{label}</span>
-        <Icon
-          className={cn(
-            "h-3.5 w-3.5 shrink-0",
-            !active && "text-muted-foreground/60"
-          )}
-        />
+        {label}
+        {isActive ? (
+          dir === "asc" ? (
+            <ChevronUp className="h-3 w-3" />
+          ) : (
+            <ChevronDown className="h-3 w-3" />
+          )
+        ) : (
+          <ChevronsUpDown className="h-3 w-3 opacity-40" />
+        )}
       </button>
     </TableHead>
   );
