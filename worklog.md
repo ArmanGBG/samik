@@ -658,3 +658,36 @@ Stage Summary:
   2. ✓ Student/Parent Dashboard — read-only with recharts chart, behavioral feed, year filter
   3. ✓ Final E2E Polish — full pipeline verified end-to-end
 - The Samik platform is now feature-complete across all 4 phases.
+
+---
+Task ID: P5-1
+Agent: Senior Full-Stack Engineer (main)
+Task: Phase 5 — Deployment Prep & SMS Discovery (PostgreSQL + Liara + SMS abstraction).
+
+Work Log:
+- Updated `prisma/schema.prisma`: `provider = "sqlite"` → `provider = "postgresql"` (production target for Liara). Kept `startTime`/`endTime` as `String` in "HH:mm" format per the architecture doc (lexicographic = chronological for zero-padded 24h strings). Added detailed comments explaining provider switching + time field rationale.
+- Created `prisma/schema.dev.prisma` — identical to `schema.prisma` but with `provider = "sqlite"` so local dev continues to work without a Postgres instance.
+- Updated `package.json` scripts: `db:push` and `db:generate` now target `prisma/schema.dev.prisma`; added `db:push:prod` and `db:generate:prod` for the production postgresql schema.
+- Ran `bun run db:generate` + `bun run db:push` against the dev schema — Prisma Client regenerated, SQLite DB in sync, local dev verified working (student dashboard returns correct data).
+- Updated `.env` with comprehensive comments documenting all env vars (DATABASE_URL, JWT_SECRET, SAMIK_SUPER_ADMIN_PHONES, ARTA_PAYAMAK_* placeholders, NODE_ENV).
+- Created `.env.example` as the production template (no secrets, documents Liara Postgres URL format + JWT generation command + Arta Payamak vars).
+- Verified `next.config.ts` already has `output: "standalone"` (from Phase 1). Enhanced with comments explaining the standalone build for Docker/PaaS.
+- Created `liara.json` at project root: `{ platform: "next", app: "samik-app", port: 3000, build: { command: "bun run build" } }`.
+- Created `src/lib/sms/provider.ts` — SMS provider abstraction layer with:
+  - `SmsProvider` interface + `SmsSendResult` type.
+  - `SimulatedSmsProvider` (dev: 500ms delay + console log).
+  - `ArtaPayamakSmsProvider` (production: POST to Arta Payamak REST API with 10s timeout, 2 retries on 5xx/network errors, exponential backoff, no retry on 4xx).
+  - `getSmsProvider()` factory — auto-selects based on `ARTA_PAYAMAK_API_KEY` env var. Zero code changes needed to switch from simulation to real gateway.
+- Updated `POST /api/v1/notifications/outbox/send-bulk` to use `getSmsProvider()` instead of hardcoded simulation. On success: marks SENT + emits SSE. On failure: marks FAILED + logs error.
+- Created `SMS_OTP_STRATEGY.md` — comprehensive strategy document covering:
+  - Current state (in-memory OTP + simulated SMS).
+  - Production strategy: OTP → Redis, Idempotency → Redis, SSE → Redis Pub/Sub.
+  - Arta Payamak API contract (request/response format, encoding, message length notes).
+  - Deployment checklist for Liara (pre-deploy, deploy, post-deploy smoke test).
+  - Remaining work table (3 critical Redis migrations + verification tasks).
+
+Stage Summary:
+- `bun run lint` → 0 errors, 0 warnings.
+- Dev server verified working after Prisma client regeneration (student dashboard returns correct data).
+- Codebase is now production-ready for Liara: PostgreSQL schema, standalone build, liara.json, env var templates, SMS provider abstraction (auto-switches to Arta Payamak on env var).
+- Remaining before go-live: Redis migrations for OTP/Idempotency/SSE (documented in SMS_OTP_STRATEGY.md).

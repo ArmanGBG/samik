@@ -30,7 +30,7 @@ generator client {
 datasource db {
   // Production: "postgresql" (Liara managed Postgres)
   // Local dev: set PRISMA_PROVIDER=sqlite in .env to fall back
-  provider = "postgresql"
+  provider = "sqlite"
   url      = env("DATABASE_URL")
 }
 

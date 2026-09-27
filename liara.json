@@ -1,0 +1,8 @@
+{
+  "platform": "next",
+  "app": "samik-app",
+  "port": 3000,
+  "build": {
+    "command": "bun run build"
+  }
+}

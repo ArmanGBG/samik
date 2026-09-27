@@ -3,6 +3,7 @@ import { z } from "zod";
 import { withTenantContext } from "@/lib/middleware-helpers/tenant-guard";
 import { db } from "@/lib/db";
 import { eventBus } from "@/lib/realtime/event-bus";
+import { getSmsProvider } from "@/lib/sms/provider";
 
 const SendBulkBody = z.object({
   ids: z.array(z.string().uuid()).min(1, "حداقل یک پیامک انتخاب کنید.").max(200),
@@ -102,7 +103,7 @@ export async function POST(req: NextRequest) {
       { status: 202 }
     );
 
-    // === STEP 2: Detach the background SMS simulation ===
+    // === STEP 2: Detach the background SMS sending ===
     // This runs AFTER the response is flushed to the client.
     // We use a detached Promise — Node.js will keep the process alive
     // until it completes (or until the serverless function times out).
@@ -110,16 +111,31 @@ export async function POST(req: NextRequest) {
     // In Next.js 16, you could also use `ctx.waitUntil(promise)` if the
     // runtime supports it (e.g. Vercel). For our Node.js dev server,
     // a plain detached Promise works perfectly.
+    //
+    // The SMS provider is selected automatically via `getSmsProvider()`:
+    //   - If ARTA_PAYAMAK_API_KEY is set → calls the real Arta Payamak API
+    //   - Otherwise → simulated (500ms delay + console log)
+    const smsProvider = getSmsProvider();
     const schoolIdForBg = schoolId;
     void Promise.resolve().then(async () => {
       for (const draft of drafts) {
         try {
-          // Simulate 500ms network delay per SMS (per architecture doc)
-          await new Promise((r) => setTimeout(r, 500));
+          // Send via the active SMS provider (simulated or Arta Payamak).
+          // The provider handles timeouts, retries, and error normalization.
+          const result = await smsProvider.send(
+            draft.recipientPhone,
+            draft.messageBody
+          );
 
-          // In production, this is where you'd call the SMS gateway:
-          //   await smsProvider.send(draft.recipientPhone, draft.messageBody)
-          // For dev, we just mark as SENT.
+          if (!result.success) {
+            // Provider returned failure — mark as FAILED with the error
+            await db.notificationOutbox.update({
+              where: { id: draft.id },
+              data: { status: "FAILED" },
+            }).catch(() => {});
+            console.error(`[sms] FAILED to ${draft.recipientPhone}: ${result.error}`);
+            continue;
+          }
 
           await db.notificationOutbox.update({
             where: { id: draft.id },
@@ -137,11 +153,12 @@ export async function POST(req: NextRequest) {
             },
           });
         } catch (err) {
-          // Mark as FAILED — the deputy can retry later
+          // Unexpected error — mark as FAILED
           await db.notificationOutbox.update({
             where: { id: draft.id },
             data: { status: "FAILED" },
           }).catch(() => {});
+          console.error(`[sms] ERROR sending to ${draft.recipientPhone}:`, err);
         }
       }
     });
