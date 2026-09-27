@@ -364,3 +364,154 @@ Stage Summary:
   - upload/landing-cta-footer.png (CTA + footer)
   - upload/landing-full.png (full-page capture)
 - Ready to resume Phase 3 (Attendance + Grading + BehavioralPoints + SSE) on architect approval.
+
+---
+Task ID: P3-1
+Agent: Senior Full-Stack Engineer (main)
+Task: Phase 3.1 — Backend APIs (students, attendance, gradebook, assessments, grades, behavioral-points).
+
+Work Log:
+- Created `/api/v1/teacher/students?classroomId=...` — lists ACTIVE enrollments with student info + guardian phones.
+- Created `/api/v1/attendance/sessions` (POST) — the idempotent batch attendance submit:
+  - Accepts { timetableSlotId, date, absentees[], latecomers[], excused[] }.
+  - Wrapped in `withIdempotency()` — checks X-Idempotency-Key header against in-memory cache (globalThis-pinned Map with 1-hour TTL).
+  - Uses `db.$transaction()` to atomically upsert ClassSession (status=SUBMITTED) + delete old AttendanceRecords + createMany new records.
+  - Derives PRESENT students from the classroom's active enrollment (default-present per Section 6).
+  - Emits `attendance:submitted` SSE event on success.
+- Created `/api/v1/gradebook?classroomId=...` — matrix query with 3 parallel Prisma calls (students + assessments + behavioral groupBy), TypeScript-side join, monthly average calculation (excluding is_absent per Section 7).
+- Created `/api/v1/assessments` (POST) — create new NUMERIC or DESCRIPTIVE assessment.
+- Created `/api/v1/grades` (POST) — upsert a single grade with unique constraint on (assessmentId, studentUserId).
+- Created `/api/v1/behavioral-points` (POST) — quick point registration with SSE emit.
+
+Stage Summary:
+- All 6 backend APIs operational. Verified via agent-browser: attendance commit returned 201, behavioral point returned 201.
+
+---
+Task ID: P3-2
+Agent: Senior Full-Stack Engineer (main)
+Task: Phase 3.2 — SSE infrastructure (EventEmitter bus + endpoint + emit-on-commit).
+
+Work Log:
+- Created `src/lib/realtime/event-bus.ts` — singleton EventEmitter pinned to globalThis (survives HMR). Two event types: `attendance:submitted` and `behavioral-point:created`. Each carries `schoolId` for tenant-filtered subscription. `subscribeToSchool()` returns an unsubscribe function.
+- Created `GET /api/v1/sse/deputy` — Next.js Route Handler with ReadableStream, `runtime="nodejs"`. Sets `Content-Type: text/event-stream`, `Cache-Control: no-cache`, `Connection: keep-alive`, `X-Accel-Buffering: no`. Sends heartbeat every 25s. Filters events by the deputy's schoolId (from JWT cookie). Cleans up on `req.signal.abort`.
+- Integrated emits: `emitAttendanceSubmitted()` called in attendance-sessions route after successful commit; `emitBehavioralPointCreated()` called in behavioral-points route after create.
+
+Stage Summary:
+- SSE pipeline verified end-to-end: teacher clicked + in session 2 → POST 201 → EventEmitter fired → SSE endpoint pushed to deputy's EventSource → deputy dashboard updated from "امتیازات مثبت: ۰" to "امتیازات مثبت: ۱" in real-time.
+
+---
+Task ID: P3-3
+Agent: Senior Full-Stack Engineer (main)
+Task: Phase 3.3 — Dexie offline DB + Background Sync Queue + Idempotency Key generator.
+
+Work Log:
+- Created `src/lib/offline/db.ts` — Dexie schema with 3 tables: `students` (hydrated from API), `timetable` (cached slots), `pendingMutations` (the sync queue). Singleton pinned to `window.__samikOfflineDB`. Helper functions: `cacheStudents()`, `cacheTimetable()`, `getCachedStudents()`.
+- Created `src/lib/offline/sync-queue.ts` — the Background Sync Queue:
+  - `enqueueMutation({endpoint, method, body})` generates a UUID idempotency key, stores the mutation in Dexie with status=pending, and triggers immediate flush if online.
+  - `flushQueue()` iterates pending mutations, sends each with `X-Idempotency-Key` header, deletes on success (200-299), marks failed on 4xx, retries on 5xx/network error (max 5 attempts).
+  - `initBackgroundSync()` wires up: initial flush on mount, `window.addEventListener('online', flush)`, 30-second polling fallback.
+  - `getQueueStatus()` returns {pending, failed, syncing} counts for UI display.
+- Created `src/lib/idempotency/store.ts` — server-side idempotency cache (globalThis Map, 1-hour TTL, concurrent dedup via pending Promises).
+
+Stage Summary:
+- Offline infrastructure ready. The roll-call page enqueues mutations with UUID keys; the queue flushes automatically when online.
+
+---
+Task ID: P3-4
+Agent: Senior Full-Stack Engineer (main)
+Task: Phase 3.4 — Teacher Roll-Call UI (iOS toggle + Commit Button + offline integration).
+
+Work Log:
+- Created `src/components/teacher/attendance-toggle.tsx` — 4-state iOS-style pill toggle (PRESENT/ABSENT/LATE/EXCUSED) with color-coded segments (emerald/red/amber/blue).
+- Created `src/app/(dashboard)/teacher/attendance/[slotId]/page.tsx` — the Roll-Call page:
+  - Loads slot info from `/api/v1/deputy/timetable` + students from `/api/v1/teacher/students`.
+  - Initializes ALL students to PRESENT (per Section 6 — "پیش‌فرض حاضر بودن همه").
+  - 4-stat summary (حاضر/غایب/تاخیر/موجه) updates live as teacher toggles.
+  - Each row: number + name + QuickPointButtons + AttendanceToggle.
+  - Row background tints based on status (red for absent, amber for late, blue for excused).
+  - Fixed-bottom Commit Button ("ثبت نهایی لیست") — large emerald button with shadow.
+  - On commit: builds payload (absentees[], latecomers[], excused[] — PRESENT is derived server-side), enqueues to offline-sync-queue with UUID idempotency key, shows toast (different message if offline), navigates back to dashboard.
+  - Offline banner + queue status banner when offline or has pending mutations.
+  - Calls `initBackgroundSync()` on mount to start the sync queue.
+- Updated teacher-current-session.tsx Hero Card button to navigate to `/teacher/attendance/[slotId]`.
+
+Stage Summary:
+- Verified e2e: 8 students loaded, all PRESENT. Toggled 2 to ABSENT + 1 to LATE → stats showed ۵ حاضر، ۲ غایب، ۱ تاخیر. Committed → POST 201 → toast "ثبت نهایی انجام شد" → redirected to dashboard.
+
+---
+Task ID: P3-5
+Agent: Senior Full-Stack Engineer (main)
+Task: Phase 3.5 — Matrix Gradebook with @tanstack/react-table.
+
+Work Log:
+- Created `src/components/teacher/gradebook-grid.tsx` — matrix gradebook:
+  - Dynamic columns: 1 student column + N assessment columns (last 30 days) + 1 monthly average column.
+  - Each grade cell is a clickable button that opens an edit dialog (numeric input with quick-select buttons [5,10,15,18,20] for NUMERIC; 4 colored buttons for DESCRIPTIVE).
+  - Grade cells color-coded by score (emerald ≥15, amber ≥10, red <10).
+  - Monthly average column per Section 7 (excludes is_absent grades).
+  - Behavioral counts (👍/👎) displayed under each student name.
+  - "ارزیابی جدید" button opens a dialog to create a new assessment (title + type + date).
+- Created `src/app/(dashboard)/teacher/gradebook/[classId]/page.tsx` — dynamic route using `use(params)` for Next.js 16.
+- Created `src/app/(dashboard)/teacher/gradebook/page.tsx` — index listing the teacher's classrooms as cards.
+
+Stage Summary:
+- Verified e2e: gradebook matrix rendered with 8 students, behavioral counts, and "—" for grades (no assessments yet). Created a behavioral point via the + button — count updated from ۰ to ۱.
+
+---
+Task ID: P3-6
+Agent: Senior Full-Stack Engineer (main)
+Task: Phase 3.6 — Quick Behavioral Points component.
+
+Work Log:
+- Created `src/components/teacher/quick-point-buttons.tsx`:
+  - Two circular buttons: [+] (emerald, POSITIVE) and [-] (red, NEGATIVE).
+  - One-tap default: click immediately calls POST /api/v1/behavioral-points (no tag required per Section 7).
+  - Long-press (500ms): opens a Popover with a text input + 4 common quick-tags + submit button.
+  - Loading spinner during API call.
+  - Toast feedback on success/failure.
+  - `onSubmitted` callback for parent re-render.
+- Integrated into both the Roll-Call page and the Gradebook grid.
+
+Stage Summary:
+- Verified: teacher clicked + in gradebook → POST 201 → SSE event fired → deputy dashboard updated in real-time.
+
+---
+Task ID: P3-7
+Agent: Senior Full-Stack Engineer (main)
+Task: Phase 3.7 — Deputy Live Dashboard (SSE consumer).
+
+Work Log:
+- Created `src/components/deputy/live-dashboard.tsx`:
+  - Establishes EventSource connection to `/api/v1/sse/deputy` on mount.
+  - Auto-reconnects every 5 seconds on error.
+  - Connection status badge (متصل (SSE) / در حال اتصال...).
+  - 4 stat cards: کلاس‌های در حال برگزاری، غایبین امروز، امتیازات مثبت، امتیازات منفی.
+  - Pending Classes section: computes from timetable + current time (slots where bell is active now). Color-coded (amber border if >10 minutes since start).
+  - Live Absentees Feed: receives `attendance:submitted` SSE events, prepends to list (max 50). Each row shows student name + class + subject + time + status badge. Phone button opens a Sheet drawer with "تماس با ولی" + "توجیه غیبت" buttons.
+  - Behavioral Activity Feed: receives `behavioral-point:created` events, displays as colored chips.
+  - Pending classes auto-refresh every 60 seconds.
+- Created `src/app/(dashboard)/deputy/live-attendance/page.tsx`.
+
+Stage Summary:
+- Verified e2e with two parallel browser sessions (deputy + teacher): teacher clicked + → deputy dashboard updated from "امتیازات مثبت: ۰" to "امتیازات مثبت: ۱" with the student name appearing in the activity feed — ALL IN REAL-TIME via SSE.
+
+---
+Task ID: P3-8
+Agent: Senior Full-Stack Engineer (main)
+Task: Phase 3.8 — Lint, dev log, agent-browser e2e verification, summary report.
+
+Work Log:
+- Fixed Prisma 6.x extension issue: when route handlers used `school: { connect: ... }` relation syntax, the tenant extension's create hook was ALSO injecting `schoolId` scalar, causing "Unknown argument `schoolId`" error. Fixed by checking `if (!data.schoolId && !data.school)` before injecting.
+- `bun run lint` → 0 errors, 0 warnings.
+- Dev log: all endpoints returning 200/201 after fixes. SSE connection shows `GET /api/v1/sse/deputy 200 in 3.3min` (long-lived stream).
+- Screenshots: roll-call-default.png, roll-call-with-absentees.png, deputy-live-dashboard.png, deputy-live-with-sse.png, teacher-gradebook-with-points.png.
+- Seeded 8 students in دهم الف classroom for testing.
+
+Stage Summary:
+- Phase 3 complete. All 5 objectives delivered:
+  1. ✓ Teacher Roll-Call UI with iOS toggle (default PRESENT) + Commit Button
+  2. ✓ Offline-First (Dexie + Background Sync Queue + Idempotency Key)
+  3. ✓ Matrix Gradebook with @tanstack/react-table
+  4. ✓ Quick Behavioral Points (+ / - with long-press tag menu)
+  5. ✓ Deputy Live Dashboard with SSE (real-time absentees + behavioral feed)
+- SSE verified end-to-end with parallel browser sessions.

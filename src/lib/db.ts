@@ -9,14 +9,15 @@ import { softDeleteExtension } from "@/lib/prisma/soft-delete-extension";
  *                            from AsyncLocalStorage (set by middleware).
  *   2. softDeleteExtension — converts `delete()` → `update deletedAt=now()`.
  *
- * Order matters: extensions are applied outer-to-inner. The tenant filter
- * must wrap the soft-delete filter so that a deputy in school A cannot
- * tombstone a record in school B by guessing its id.
+ * Order matters. Per Prisma docs, when you compose A.$extends(B), the
+ * resulting client runs B's hooks FIRST, then A's hooks. We want:
+ *   tenant filter (inject schoolId + WHERE) → soft-delete (filter deletedAt)
+ * So soft-delete is applied LAST (innermost), tenant is applied FIRST (outer).
  */
 const basePrisma = new PrismaClient({
   log: process.env.NODE_ENV === "development" ? ["warn", "error"] : ["error"],
 });
 
-export const db = basePrisma.$extends(tenantExtension).$extends(softDeleteExtension);
+export const db = basePrisma.$extends(softDeleteExtension).$extends(tenantExtension);
 
 export type { PrismaClient };

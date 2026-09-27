@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -83,6 +84,7 @@ const WEEK_TYPE_TINT: Record<string, string> = {
 };
 
 export function TeacherCurrentSession() {
+  const router = useRouter();
   const [data, setData] = useState<CurrentSessionResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -202,7 +204,7 @@ export function TeacherCurrentSession() {
             <Button
               variant="secondary"
               className="bg-white text-emerald hover:bg-white/90"
-              onClick={() => toast.info("ثبت حضور و غیاب در فاز ۳ پیاده‌سازی می‌شود.")}
+              onClick={() => router.push(`/teacher/attendance/${activeSession.slotId}`)}
             >
               <PlayCircle className="h-4 w-4 ml-2" />
               شروع حضور و غیاب

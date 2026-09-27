@@ -141,7 +141,12 @@ export const tenantExtension = Prisma.defineExtension((client: PrismaClient) => 
         async create({ model, args, query }) {
           const sid = currentSchoolId();
           if (isTenantScoped(model) && sid && model !== "School") {
-            args.data = { ...(args.data as object), schoolId: sid };
+            const data = args.data as Record<string, unknown>;
+            // Only inject schoolId if the caller didn't already provide it
+            // via the scalar FK OR the relation connect syntax.
+            if (!data.schoolId && !data.school) {
+              data.schoolId = sid;
+            }
           }
           return query(args);
         },
