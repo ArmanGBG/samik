@@ -378,7 +378,16 @@ export function ClassRoomsManager() {
             />
           ) : (
             <div className="overflow-x-auto max-h-[28rem] overflow-y-auto sticky-table-header">
-              <Table>
+              <Table className="table-fixed w-full">
+                <colgroup>
+                  <col className="w-[10%]" />
+                  <col className="w-[12%]" />
+                  <col className="w-[10%]" />
+                  <col className="w-[14%]" />
+                  <col className="w-[16%]" />
+                  <col className="w-[12%]" />
+                  <col className="w-[10%]" />
+                </colgroup>
                 <TableHeader>
                   <TableRow className="hover:bg-transparent">
                     <SortableHead
