@@ -119,13 +119,21 @@ model User {
 }
 
 model School {
-  id         String       @id @default(uuid())
-  name       String
-  subdomain  String       @unique
-  smsBalance Int          @default(0)
-  status     SchoolStatus @default(ACTIVE)
-  createdAt  DateTime     @default(now())
-  updatedAt  DateTime     @updatedAt
+  id             String       @id @default(uuid())
+  name           String
+  subdomain      String       @unique
+  smsBalance     Int          @default(0)
+  status         SchoolStatus @default(ACTIVE)
+  /**
+   * Anchor date for Week-Parity calculation (Section 5 of architecture doc).
+   * The week containing this date is treated as Week 1 = ODD_WEEKS.
+   * Used by `GET /api/v1/teacher/current-session` to decide whether the
+   * current week is ODD or EVEN, then matched against `TimetableSlot.weekType`.
+   * Nullable until the Principal configures the academic year.
+   */
+  termStartDate  DateTime?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
 
   classrooms        ClassRoom[]
   staffEmployments  StaffEmployment[]

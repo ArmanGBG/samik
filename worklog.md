@@ -151,3 +151,176 @@ Stage Summary:
   5. ✓ proxy.ts 3-layer guards (Auth → Tenant → Role) operational
   6. ✓ 5 role dashboards + working SuperAdmin onboarding
 - Ready for Phase 2 (Academic Structure & Timetable) on architect approval.
+
+---
+Task ID: 2-a
+Agent: Senior Full-Stack Engineer (main)
+Task: Phase 2.0 — Add termStartDate DateTime? to School model.
+
+Work Log:
+- Added `termStartDate DateTime?` field to the School model with doc comment explaining its role as Week-Parity anchor (Section 5).
+- Ran `bun run db:push` — schema in sync. Ran `bun run db:generate` to regenerate Prisma Client (the dev server had to be restarted to pick up the new client).
+- Initial 500 error on `/api/v1/teacher/current-session` because the old Prisma Client didn't know about `termStartDate`. Fixed by regenerating + restarting dev server.
+
+Stage Summary:
+- Schema updated. Ready for week-parity calculation in the Teacher current-session endpoint.
+
+---
+Task ID: 2-b
+Agent: Senior Full-Stack Engineer (main)
+Task: Phase 2.1 — Principal: ClassRoom CRUD (API + UI).
+
+Work Log:
+- Created `/api/v1/principal/classrooms` with GET (list), POST (create), PATCH (update), DELETE (soft-delete — converted by soft-delete-extension to `update deletedAt=now()`).
+- Zod validation: gradeLevel + name required. Duplicate check (gradeLevel+name) within the active school.
+- Granted DEPUTY read access to GET (needed by the timetable builder).
+- Created `classrooms-manager.tsx` — form (grade datalist + name) + table showing student/slot/assessment counts + soft-delete button with confirmation.
+- Persian numerals via `toLocaleString("fa-IR")` for counts.
+
+Stage Summary:
+- Tested e2e: created دهم الف، دهم ب، یازدهم الف — all persisted correctly, counts updated.
+
+---
+Task ID: 2-c
+Agent: Senior Full-Stack Engineer (main)
+Task: Phase 2.2 — Principal: Subject CRUD (API + UI).
+
+Work Log:
+- Created `/api/v1/principal/subjects` with GET (list), POST (create), DELETE (hard delete — subjects are leaf nodes, no academic history attached directly).
+- Duplicate-title check within the active school.
+- Created `subjects-manager.tsx` — form + table showing slot usage count. Delete button disabled if the subject is referenced by timetable slots.
+
+Stage Summary:
+- Tested e2e: created ریاضیات، فیزیک، شیمی، ادبیات — all persisted, delete button correctly disabled for those in use.
+
+---
+Task ID: 2-d
+Agent: Senior Full-Stack Engineer (main)
+Task: Phase 2.3 — Principal: BellSchedule CRUD (API + UI) with strict HH:mm validation.
+
+Work Log:
+- Created `/api/v1/principal/bell-schedules` with GET, POST, DELETE.
+- Time validation: `hhmmSchema` enforces `HH:mm` 24-hour format via regex `/^([01]\d|2[0-3]):([0-5]\d)$/`. `.refine()` checks start < end using `hhmmToMinutes()`.
+- Overlap check: new bell must not overlap existing bells in the same school (uses the same lexicographic string-comparison formula from time-utils.ts).
+- DELETE blocked if the bell is referenced by timetable slots (returns 409 with count).
+- Created `bell-schedules-manager.tsx` — HTML5 `<input type="time">` for the time pickers, plus a duration column ("۹۰ دقیقه") and Persian-numeral display of times.
+- Created `term-config-manager.tsx` — separate page to set `School.termStartDate` with live week-parity preview (shows current week number + parity badge).
+
+Stage Summary:
+- Tested e2e: created زنگ اول (07:30–09:00), زنگ دوم (09:15–10:45), زنگ سوم (11:00–12:30). Overlap correctly detected and rejected (409) when attempting overlapping times.
+- Set termStartDate to 2026-09-21 — the parity preview showed "هفته ۱ — فرد" correctly.
+
+---
+Task ID: 2-e
+Agent: Senior Full-Stack Engineer (main)
+Task: Phase 2.4 — Deputy: Timetable Builder UI.
+
+Work Log:
+- Created `/api/v1/deputy/timetable` with GET (list slots + joins), POST (create with conflict check), DELETE (hard delete).
+- Created `/api/v1/deputy/teachers` to populate the teacher dropdown.
+- Created `timetable-builder.tsx` — interactive 7×N grid (days × bells):
+  - Classroom selector (button group at top).
+  - Grid table with days as columns (شنبه..جمعه), bells as rows.
+  - Each cell shows all slots for that day×bell×classroom combination, color-coded by weekType (emerald=ALL, info=ODD, warning=EVEN).
+  - Each slot card shows subject title + teacher name + weekType badge + delete button (revealed on hover).
+  - Empty cells show "—" placeholder.
+  - "افزودن خانه برنامه" button opens a Dialog form with Select dropdowns for class/subject/teacher/bell/day/weekType.
+  - On submit, the API runs the conflict detector; if 409, an 8-second toast shows the conflicting school + class + subject.
+  - Prerequisites check: if classrooms/subjects/teachers/bells are empty, shows a "پیش‌نیازها تکمیل نشده‌اند" status card with counts.
+  - Summary stats at the bottom: total slots / odd-only / even-only / unique teachers.
+- Updated sidebar NAV to include the new structure sub-pages (کلاس‌ها، دروس، زنگ‌ها، سال تحصیلی).
+- Fixed initial bug: `DoorClosed` and `Clock` icons not imported into dashboard-shell.tsx (caused a 500 during HMR, fixed by adding imports).
+
+Stage Summary:
+- Tested e2e: grid correctly displays 2 slots created via API (Saturday + Sunday زنگ اول for زهرا احمدی in دهم الف). Color coding and summary stats working.
+
+---
+Task ID: 2-f
+Agent: Senior Full-Stack Engineer (main)
+Task: Phase 2.5 — Global Conflict Detector (the core architecture feature).
+
+Work Log:
+- Created `src/lib/timetable/time-utils.ts` with:
+  - `HH_MM_REGEX` for format validation.
+  - `hhmmToMinutes()` and `minutesTohhmm()` converters.
+  - `hhmmToPersian()` for Persian-numeral display.
+  - **`timeRangesOverlap(aStart, aEnd, bStart, bEnd)`** — the core overlap function using the interval-overlap formula `max(aStart, bStart) < min(aEnd, bEnd)`. For "HH:mm" 24-hour zero-padded strings, lexicographic comparison equals chronological comparison (proven in code comments).
+- Created `src/lib/timetable/days.ts` with `DAYS_OF_WEEK` (Saturday=0..Friday=6 per Iranian week), `jsGetDayToSamikDay()` converter (JS Sunday=0 → Samik Saturday=0), `currentSamikDayOfWeek()`.
+- Created `src/lib/timetable/week-parity.ts` with `calculateWeekParity()` and `weekTypeMatches()`.
+- Created `src/lib/timetable/conflict-detector.ts` with `detectTeacherConflict()`:
+  - Uses `runBypassingTenant()` to bypass the tenant filter (per Section 5 directive).
+  - Queries ALL TimetableSlots across ALL schools for the given teacherUserId + dayOfWeek.
+  - For each candidate, checks weekTypesOverlap (ALL_WEEKS is universal; ODD/EVEN only conflict if same parity).
+  - For each surviving candidate, runs `timeRangesOverlap()` against the requested range using the bell's startTime/endTime.
+  - Returns ConflictFinding[] with schoolName + classroomName + subjectTitle (no other tenant data leaked).
+- Integrated into `/api/v1/deputy/timetable` POST: if conflicts.length > 0, returns 409 with the conflict details.
+
+Stage Summary:
+- Tested e2e (cross-tenant): created slot for زهرا احمدی in beheshti (07:30–09:00 Saturday). Then logged in as deputy in alborz school, attempted to create slot for the same teacher at the same time → got 409 with "این دبیر در این ساعت در مدرسه دیگری کلاس دارد" + conflict details (schoolName=دبیرستان شهید بهشتی, classroomName=دهم الف, subjectTitle=ادبیات).
+- Tested negative case: created slot at 10:00–11:30 (non-overlapping) for the same teacher → success (201). Confirms the detector doesn't give false positives.
+
+---
+Task ID: 2-g
+Agent: Senior Full-Stack Engineer (main)
+Task: Phase 2.6 — Teacher current-session API + Hero Card UI.
+
+Work Log:
+- Created `/api/v1/teacher/current-session` (GET):
+  - Accepts optional `?now=ISO` query param (per Section 5: client sends its timestamp).
+  - Loads the school's `termStartDate`, runs `calculateWeekParity()` → { parity, weekNumber, isPreTerm, isUnconfigured }.
+  - Computes `currentSamikDayOfWeek(now)` — Saturday=0..Friday=6.
+  - Computes `nowHHmm` from `now.getHours()/getMinutes()` (zero-padded).
+  - Loads all of this teacher's slots for today (tenant filter active — only current school's slots).
+  - Filters by `weekTypeMatches()` — ALL_WEEKS always matches; ODD/EVEN only if parity matches AND school is configured.
+  - Finds active session: current time within `[startMin - 15, endMin)` (15-minute tolerance before bell start per Section 5).
+  - Returns server metadata + activeSession + agenda.
+- Created `teacher-current-session.tsx`:
+  - Status bar at top: today name, current time (Persian numerals), week parity badge (or "سال تحصیلی پیکربندی نشده" warning).
+  - Hero Card (emerald gradient) when activeSession is found: large subject title, bell name + time range, 3 info cards (class / time / weekType), "شروع حضور و غیاب" button (Phase 3 placeholder).
+  - Empty state when no active session: "کلاس فعالی در این زنگ ندارید".
+  - Agenda list below: all of today's slots with time / subject / classroom / weekType badge. Active slot highlighted with emerald border.
+  - Auto-refresh every 60 seconds (so the Hero Card appears/disappears as time passes).
+- Updated teacher dashboard `page.tsx` to render the new component.
+
+Stage Summary:
+- Tested e2e: as زهرا احمدی (teacher) in beheshti, the dashboard correctly showed:
+  - "یکشنبه" (Sunday) + "۰۷:۳۰" current time
+  - "هفته ۱ — فرد" badge (termStartDate=2026-09-21, today=2026-09-27 → week 1 → ODD)
+  - Hero Card: "ادبیات" / "زنگ اول — ۰۷:۳۰ تا ۰۹:۰۰" / کلاس دهم الف / زمان ۰۷:۳۰–۰۹:۰۰ / هر هفته
+  - Agenda: 1 slot today
+  - The "شروع حضور و غیاب" button is present (Phase 3 will wire it up).
+
+---
+Task ID: 2-h
+Agent: Senior Full-Stack Engineer (main)
+Task: Phase 2.7 — Lint, dev log, agent-browser e2e verification.
+
+Work Log:
+- `bun run lint` → 0 errors, 0 warnings (after fixing unused eslint-disable in timetable-builder).
+- Dev log: all 200s for the new endpoints after Prisma Client regeneration.
+- Fixed runtime issues:
+  - `DoorClosed`/`Clock` icon imports missing in dashboard-shell.tsx (after updating NAV).
+  - `_count` include syntax error in deputy/teachers route (Prisma doesn't support nested _count in include — replaced with manual Promise.all of count queries).
+  - Prisma Client needed regeneration after schema change (had to restart dev server).
+  - DEPUTY role couldn't read classrooms (added DEPUTY to allowedRoles in GET /api/v1/principal/classrooms).
+- Agent-browser e2e tests (all passed):
+  1. Principal logged in → navigated to کلاس‌ها، دروس، زنگ‌ها pages.
+  2. Created 3 classrooms (دهم الف، دهم ب، یازدهم الف) — all persisted, counts displayed correctly in Persian numerals.
+  3. Created 4 subjects (ریاضیات، فیزیک، شیمی، ادبیات).
+  4. Created 3 bell schedules (زنگ اول 07:30–09:00، زنگ دوم 09:15–10:45، زنگ سوم 11:00–12:30). Overlap correctly rejected (409).
+  5. Set termStartDate=2026-09-21 — parity preview showed "هفته ۱ — فرد".
+  6. Deputy logged in (has 2 profiles: beheshti + alborz) → navigated to Timetable Builder.
+  7. Created slot for زهرا احمدی in beheshti (Saturday زنگ اول) — 201 success.
+  8. Created slot for زهرا احمدی in alborz at the SAME time → 409 with conflict details (schoolName, classroomName, subjectTitle).
+  9. Created slot at non-overlapping time → 201 success (conflict detector doesn't false-positive).
+  10. Created Sunday slot for زهرا احمدی in beheshti.
+  11. Teacher زهرا احمدی logged in → Hero Card correctly displayed (ادبیات، دهم الف، زنگ اول 07:30–09:00، هر هفته) + week parity badge (هفته ۱ — فرد) + agenda.
+  12. Screenshots: teacher-hero-card.png, timetable-with-slots.png.
+
+Stage Summary:
+- Phase 2 complete and verified end-to-end. All 4 objectives delivered:
+  1. ✓ Principal CRUDs for ClassRoom / Subject / BellSchedule + termStartDate config
+  2. ✓ Deputy Timetable Builder with interactive grid + assignment form
+  3. ✓ Global Conflict Detector (runBypassingTenant + string-based overlap + 409)
+  4. ✓ Teacher current-session API + Hero Card UI
+- Ready for Phase 3 (Attendance + Grading + BehavioralPoints + SSE).

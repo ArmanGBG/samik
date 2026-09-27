@@ -37,6 +37,8 @@ import {
   LayoutDashboard,
   Settings,
   GraduationCap,
+  DoorClosed,
+  Clock,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -53,7 +55,10 @@ const NAV: NavItem[] = [
   // SuperAdmin
   { href: "schools", label: "مدارس", icon: School, roles: ["SUPER_ADMIN"] },
   // Principal
-  { href: "structure", label: "ساختار مدرسه", icon: Settings, roles: ["PRINCIPAL"] },
+  { href: "structure/classrooms", label: "کلاس‌ها", icon: DoorClosed, roles: ["PRINCIPAL"] },
+  { href: "structure/subjects", label: "دروس", icon: BookOpen, roles: ["PRINCIPAL"] },
+  { href: "structure/bell-schedules", label: "زنگ‌ها", icon: Clock, roles: ["PRINCIPAL"] },
+  { href: "structure/term", label: "سال تحصیلی", icon: CalendarClock, roles: ["PRINCIPAL"] },
   { href: "staff", label: "پرسنل", icon: Users, roles: ["PRINCIPAL"] },
   { href: "students", label: "دانش‌آموزان", icon: GraduationCap, roles: ["PRINCIPAL"] },
   // Deputy
