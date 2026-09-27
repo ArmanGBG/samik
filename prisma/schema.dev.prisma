@@ -28,9 +28,9 @@ generator client {
 }
 
 datasource db {
-  // Production: "postgresql" (Liara managed Postgres)
-  // Local dev: set PRISMA_PROVIDER=sqlite in .env to fall back
-  provider = "sqlite"
+  // CRITICAL: must remain "postgresql" — the user runs a local Postgres Docker container.
+  // Do NOT change back to "sqlite" (breaks the user's `bun run db:push` after git pull).
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
