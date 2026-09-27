@@ -147,25 +147,31 @@ export default function VerifyPage() {
               className="stagger-item flex justify-center py-2"
               style={{ animationDelay: "60ms" }}
             >
-              <InputOTP
-                maxLength={6}
-                value={code}
-                onChange={(v) => setCode(v)}
-                dir="ltr"
-                autoFocus
-                inputMode="numeric"
-                pattern="^[0-9]*$"
-                containerClassName="justify-center"
-              >
-                <InputOTPGroup>
-                  <InputOTPSlot index={0} className="h-12 w-10 text-lg tabular-nums" />
-                  <InputOTPSlot index={1} className="h-12 w-10 text-lg tabular-nums" />
-                  <InputOTPSlot index={2} className="h-12 w-10 text-lg tabular-nums" />
-                  <InputOTPSlot index={3} className="h-12 w-10 text-lg tabular-nums" />
-                  <InputOTPSlot index={4} className="h-12 w-10 text-lg tabular-nums" />
-                  <InputOTPSlot index={5} className="h-12 w-10 text-lg tabular-nums" />
-                </InputOTPGroup>
-              </InputOTP>
+              {/* CRITICAL: dir="ltr" on the wrapper forces the OTP slots
+                  to render Left-to-Right regardless of the page's RTL.
+                  Without this, the browser's RTL flex algorithm reverses
+                  the slot order (slot 0 appears rightmost, slot 5 leftmost),
+                  causing focus + input to flow in the wrong direction. */}
+              <div dir="ltr" className="flex justify-center">
+                <InputOTP
+                  maxLength={6}
+                  value={code}
+                  onChange={(v) => setCode(v)}
+                  autoFocus
+                  inputMode="numeric"
+                  pattern="^[0-9]*$"
+                  containerClassName="justify-center"
+                >
+                  <InputOTPGroup className="flex-row" dir="ltr">
+                    <InputOTPSlot index={0} className="h-12 w-10 text-lg font-mono tabular-nums" />
+                    <InputOTPSlot index={1} className="h-12 w-10 text-lg font-mono tabular-nums" />
+                    <InputOTPSlot index={2} className="h-12 w-10 text-lg font-mono tabular-nums" />
+                    <InputOTPSlot index={3} className="h-12 w-10 text-lg font-mono tabular-nums" />
+                    <InputOTPSlot index={4} className="h-12 w-10 text-lg font-mono tabular-nums" />
+                    <InputOTPSlot index={5} className="h-12 w-10 text-lg font-mono tabular-nums" />
+                  </InputOTPGroup>
+                </InputOTP>
+              </div>
             </div>
 
             {/* Resend countdown */}
