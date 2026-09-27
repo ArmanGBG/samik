@@ -14,8 +14,6 @@ import { Badge } from "@/components/ui/badge";
 import {
   Card,
   CardContent,
-  CardHeader,
-  CardTitle,
 } from "@/components/ui/card";
 import {
   Dialog,
@@ -45,13 +43,14 @@ import { toast } from "sonner";
 import {
   Loader2,
   Plus,
-  ArrowRight,
   TrendingUp,
   ThumbsUp,
   ThumbsDown,
   BookOpen,
 } from "lucide-react";
 import { QuickPointButtons } from "@/components/teacher/quick-point-buttons";
+import { PageHeader } from "@/components/shared/page-header";
+import { ScrollReveal } from "@/components/shared/scroll-reveal";
 import { cn } from "@/lib/utils";
 
 interface Assessment {
@@ -92,10 +91,28 @@ const DESCRIPTIVE_LABELS: Record<string, { label: string; tint: string }> = {
   NEEDS_IMPROVEMENT: { label: "نیاز به تلاش", tint: "bg-destructive/10 text-destructive" },
 };
 
-const PERSIAN_DIGITS = ["۰", "۱", "۲", "۳", "۴", "۵", "۶", "۷", "۸", "۹"];
 function toPersian(num: number | null): string {
   if (num === null) return "—";
   return num.toLocaleString("fa-IR", { maximumFractionDigits: 2 });
+}
+
+/**
+ * Color tint for a numeric score:
+ *   emerald ≥ 15, amber ≥ 10, red < 10.
+ * Per the task spec.
+ */
+function scoreTint(score: number | null): string {
+  if (score === null) return "";
+  if (score >= 15) return "bg-emerald/10 text-emerald hover:bg-emerald/20";
+  if (score >= 10) return "bg-warning/10 text-warning hover:bg-warning/20";
+  return "bg-destructive/10 text-destructive hover:bg-destructive/20";
+}
+
+function averageColor(avg: number | null): string {
+  if (avg === null) return "text-muted-foreground";
+  if (avg >= 15) return "text-emerald";
+  if (avg >= 10) return "text-warning";
+  return "text-destructive";
 }
 
 export function GradebookGrid({ classId }: { classId: string }) {
@@ -141,14 +158,14 @@ export function GradebookGrid({ classId }: { classId: string }) {
           const s = row.original;
           return (
             <div className="flex items-center gap-2 min-w-[180px]">
-              <div className="flex-1">
-                <div className="font-medium">{s.fullName}</div>
-                <div className="flex items-center gap-1 mt-0.5">
-                  <span className="inline-flex items-center gap-0.5 text-[10px] text-emerald">
+              <div className="flex-1 min-w-0">
+                <div className="font-medium text-sm truncate">{s.fullName}</div>
+                <div className="flex items-center gap-2 mt-0.5">
+                  <span className="inline-flex items-center gap-0.5 text-[10px] text-emerald tabular-nums">
                     <ThumbsUp className="h-2.5 w-2.5" />
                     {s.behavioralPoints.positive.toLocaleString("fa-IR")}
                   </span>
-                  <span className="inline-flex items-center gap-0.5 text-[10px] text-destructive">
+                  <span className="inline-flex items-center gap-0.5 text-[10px] text-destructive tabular-nums">
                     <ThumbsDown className="h-2.5 w-2.5" />
                     {s.behavioralPoints.negative.toLocaleString("fa-IR")}
                   </span>
@@ -168,9 +185,9 @@ export function GradebookGrid({ classId }: { classId: string }) {
       ...data.assessments.map((a) => ({
         id: a.id,
         header: () => (
-          <div className="text-center min-w-[80px]">
+          <div className="text-center min-w-[70px]">
             <div className="font-medium text-xs truncate" title={a.title}>{a.title}</div>
-            <div className="text-[10px] text-muted-foreground mt-0.5">
+            <div className="text-[10px] text-muted-foreground mt-0.5 tabular-nums">
               {new Date(a.date).toLocaleDateString("fa-IR")}
             </div>
             {a.evaluationType === "NUMERIC" ? (
@@ -209,7 +226,7 @@ export function GradebookGrid({ classId }: { classId: string }) {
       {
         id: "average",
         header: () => (
-          <div className="text-center min-w-[80px]">
+          <div className="text-center min-w-[70px]">
             <TrendingUp className="h-3 w-3 mx-auto mb-0.5" />
             <span className="text-xs">میانگین ۳۰ روز</span>
           </div>
@@ -218,10 +235,8 @@ export function GradebookGrid({ classId }: { classId: string }) {
           const avg = row.original.monthlyAverage;
           return (
             <div className={cn(
-              "text-center font-bold",
-              avg === null ? "text-muted-foreground" :
-              avg >= 15 ? "text-emerald" :
-              avg >= 10 ? "text-warning" : "text-destructive"
+              "text-center text-sm font-bold tabular-nums",
+              averageColor(avg)
             )}>
               {toPersian(avg)}
             </div>
@@ -319,115 +334,144 @@ export function GradebookGrid({ classId }: { classId: string }) {
   if (!data) return null;
 
   return (
-    <div className="max-w-7xl mx-auto space-y-6">
-      {/* Header */}
-      <div className="flex items-start justify-between flex-wrap gap-3">
-        <div>
-          <h1 className="text-2xl font-bold text-navy flex items-center gap-2">
-            <BookOpen className="h-6 w-6" />
-            دفتر نمره — {data.classroom.gradeLevel} {data.classroom.name}
-          </h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            {data.assessments.length} ارزیابی در ۳۰ روز گذشته • {data.students.length} دانش‌آموز
-          </p>
-        </div>
-        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-          <DialogTrigger asChild>
-            <Button className="bg-emerald hover:bg-emerald-dark">
-              <Plus className="h-4 w-4 ml-2" />
-              ارزیابی جدید
-            </Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle className="text-navy">ایجاد ارزیابی جدید</DialogTitle>
-              <DialogDescription>
-                نوع ارزیابی را انتخاب کنید. نمرات بعد از ایجاد قابل ثبت هستند.
-              </DialogDescription>
-            </DialogHeader>
-            <div className="space-y-3 py-2">
-              <div className="space-y-1.5">
-                <Label>عنوان ارزیابی</Label>
-                <Input
-                  value={newAssessment.title}
-                  onChange={(e) => setNewAssessment({ ...newAssessment, title: e.target.value })}
-                  placeholder="مثلاً پرسش کلاسی فصل ۲"
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
+    <div className="max-w-7xl mx-auto space-y-5">
+      <PageHeader
+        title={`دفتر نمره — ${data.classroom.gradeLevel} ${data.classroom.name}`}
+        subtitle={
+          <span className="tabular-nums">
+            {data.assessments.length.toLocaleString("fa-IR")} ارزیابی در ۳۰ روز گذشته • {data.students.length.toLocaleString("fa-IR")} دانش‌آموز
+          </span>
+        }
+        icon={BookOpen}
+        actions={
+          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+            <DialogTrigger asChild>
+              <Button className="bg-emerald hover:bg-emerald-dark h-9 gap-2">
+                <Plus className="h-4 w-4" />
+                ارزیابی جدید
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-md">
+              <DialogHeader>
+                <DialogTitle className="text-navy">ایجاد ارزیابی جدید</DialogTitle>
+                <DialogDescription>
+                  نوع ارزیابی را انتخاب کنید. نمرات بعد از ایجاد قابل ثبت هستند.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-3 py-1">
                 <div className="space-y-1.5">
-                  <Label>نوع نمره</Label>
-                  <Select
-                    value={newAssessment.evaluationType}
-                    onValueChange={(v) => setNewAssessment({ ...newAssessment, evaluationType: v as any })}
-                  >
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="NUMERIC">عددی (۰-۲۰)</SelectItem>
-                      <SelectItem value="DESCRIPTIVE">توصیفی</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-1.5">
-                  <Label>تاریخ</Label>
+                  <Label className="text-xs font-medium">عنوان ارزیابی</Label>
                   <Input
-                    type="date"
-                    dir="ltr"
-                    className="font-mono text-left"
-                    value={newAssessment.date}
-                    onChange={(e) => setNewAssessment({ ...newAssessment, date: e.target.value })}
+                    value={newAssessment.title}
+                    onChange={(e) => setNewAssessment({ ...newAssessment, title: e.target.value })}
+                    placeholder="مثلاً پرسش کلاسی فصل ۲"
+                    className="h-9"
                   />
                 </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-medium">نوع نمره</Label>
+                    <Select
+                      value={newAssessment.evaluationType}
+                      onValueChange={(v) => setNewAssessment({ ...newAssessment, evaluationType: v as any })}
+                    >
+                      <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="NUMERIC">عددی (۰-۲۰)</SelectItem>
+                        <SelectItem value="DESCRIPTIVE">توصیفی</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-medium">تاریخ</Label>
+                    <Input
+                      type="date"
+                      dir="ltr"
+                      className="font-mono text-left h-9 tabular-nums"
+                      value={newAssessment.date}
+                      onChange={(e) => setNewAssessment({ ...newAssessment, date: e.target.value })}
+                    />
+                  </div>
+                </div>
               </div>
-            </div>
-            <DialogFooter>
-              <Button
-                onClick={createAssessment}
-                disabled={saving || !newAssessment.title}
-                className="bg-emerald hover:bg-emerald-dark"
-              >
-                {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : "ایجاد"}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-      </div>
+              <DialogFooter>
+                <Button
+                  onClick={createAssessment}
+                  disabled={saving || !newAssessment.title}
+                  className="bg-emerald hover:bg-emerald-dark"
+                >
+                  {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : "ایجاد"}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        }
+      />
 
       {/* Matrix grid */}
-      <Card>
-        <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                {table.getHeaderGroups().map((hg) => (
-                  <TableRow key={hg.id}>
-                    {hg.headers.map((h) => (
-                      <TableHead key={h.id} className="text-right border-l border-border last:border-l-0">
-                        {h.isPlaceholder ? null : flexRender(h.column.columnDef.header, h.getContext())}
-                      </TableHead>
-                    ))}
-                  </TableRow>
-                ))}
-              </TableHeader>
-              <TableBody>
-                {table.getRowModel().rows.map((row) => (
-                  <TableRow key={row.id}>
-                    {row.getVisibleCells().map((cell) => (
-                      <TableCell key={cell.id} className="border-l border-border last:border-l-0 p-2">
-                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                      </TableCell>
-                    ))}
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-        </CardContent>
-      </Card>
+      <ScrollReveal>
+        <Card>
+          <CardContent className="p-0">
+            <div className="overflow-auto rounded-lg border max-h-[36rem]">
+              <Table>
+                <TableHeader className="sticky-table-header">
+                  {table.getHeaderGroups().map((hg) => (
+                    <TableRow key={hg.id} className="bg-muted/60 hover:bg-muted/60">
+                      {hg.headers.map((h) => {
+                        const isStudent = h.column.id === "student";
+                        return (
+                          <TableHead
+                            key={h.id}
+                            className={cn(
+                              "text-right border-l border-border last:border-l-0 bg-inherit p-2",
+                              isStudent && "sticky right-0 z-[15] bg-muted/80 backdrop-blur-sm"
+                            )}
+                          >
+                            {h.isPlaceholder ? null : flexRender(h.column.columnDef.header, h.getContext())}
+                          </TableHead>
+                        );
+                      })}
+                    </TableRow>
+                  ))}
+                </TableHeader>
+                <TableBody>
+                  {table.getRowModel().rows.map((row, idx) => (
+                    <TableRow
+                      key={row.id}
+                      className={cn(
+                        "stagger-item data-table-row bg-card",
+                        idx % 2 === 1 && "bg-muted/20"
+                      )}
+                      style={{ animationDelay: `${idx * 30}ms` }}
+                    >
+                      {row.getVisibleCells().map((cell) => {
+                        const isStudent = cell.column.id === "student";
+                        const isAverage = cell.column.id === "average";
+                        return (
+                          <TableCell
+                            key={cell.id}
+                            className={cn(
+                              "border-l border-border last:border-l-0 p-1.5 align-middle",
+                              isStudent && "sticky right-0 z-[5] bg-inherit",
+                              isAverage && "font-bold"
+                            )}
+                          >
+                            {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                          </TableCell>
+                        );
+                      })}
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </CardContent>
+        </Card>
+      </ScrollReveal>
 
       {/* Edit grade dialog */}
       <Dialog open={!!editing} onOpenChange={(o) => !o && setEditing(null)}>
-        <DialogContent>
+        <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle className="text-navy">
               ثبت نمره — {editing?.studentName}
@@ -438,7 +482,7 @@ export function GradebookGrid({ classId }: { classId: string }) {
                 : "وضعیت توصیفی را انتخاب کنید."}
             </DialogDescription>
           </DialogHeader>
-          <div className="py-2">
+          <div className="py-1">
             {editing?.type === "NUMERIC" ? (
               <div className="space-y-3">
                 <div className="flex gap-2">
@@ -451,22 +495,24 @@ export function GradebookGrid({ classId }: { classId: string }) {
                     onChange={(e) => setEditValue(e.target.value)}
                     placeholder="مثلاً ۱۸.۵"
                     dir="ltr"
-                    className="font-mono text-center text-lg"
+                    className="font-mono text-center text-lg h-10 tabular-nums"
                   />
                   <Button
                     variant={editValue === "absent" ? "destructive" : "outline"}
                     onClick={() => setEditValue(editValue === "absent" ? "" : "absent")}
+                    className="h-10"
                   >
                     غایب
                   </Button>
                 </div>
-                <div className="grid grid-cols-5 gap-1">
+                <div className="grid grid-cols-5 gap-1.5">
                   {[5, 10, 15, 18, 20].map((n) => (
                     <Button
                       key={n}
                       variant="outline"
                       size="sm"
                       onClick={() => setEditValue(n.toString())}
+                      className="tabular-nums"
                     >
                       {n.toLocaleString("fa-IR")}
                     </Button>
@@ -478,6 +524,7 @@ export function GradebookGrid({ classId }: { classId: string }) {
                 {Object.entries(DESCRIPTIVE_LABELS).map(([key, { label, tint }]) => (
                   <button
                     key={key}
+                    type="button"
                     onClick={() => setEditValue(key)}
                     className={cn(
                       "p-3 rounded-lg border-2 transition-all text-sm font-medium",
@@ -518,6 +565,7 @@ function GradeCellDisplay({
   if (!grade || (grade.numericScore === null && grade.descriptiveScore === null && !grade.isAbsent)) {
     return (
       <button
+        type="button"
         onClick={onClick}
         className="w-full h-9 rounded-md border border-dashed border-border hover:border-navy hover:bg-navy/5 text-muted-foreground/40 hover:text-navy text-xs transition"
       >
@@ -528,6 +576,7 @@ function GradeCellDisplay({
   if (grade.isAbsent) {
     return (
       <button
+        type="button"
         onClick={onClick}
         className="w-full h-9 rounded-md bg-destructive/10 text-destructive text-xs font-medium hover:bg-destructive/20 transition"
       >
@@ -536,20 +585,16 @@ function GradeCellDisplay({
     );
   }
   if (type === "NUMERIC" && grade.numericScore !== null) {
-    const score = grade.numericScore;
-    const tint =
-      score >= 15 ? "bg-emerald/10 text-emerald hover:bg-emerald/20"
-      : score >= 10 ? "bg-warning/10 text-warning hover:bg-warning/20"
-      : "bg-destructive/10 text-destructive hover:bg-destructive/20";
     return (
       <button
+        type="button"
         onClick={onClick}
         className={cn(
-          "w-full h-9 rounded-md text-sm font-bold transition",
-          tint
+          "w-full h-9 rounded-md text-sm font-bold tabular-nums transition",
+          scoreTint(grade.numericScore)
         )}
       >
-        {score.toLocaleString("fa-IR", { maximumFractionDigits: 2 })}
+        {grade.numericScore.toLocaleString("fa-IR", { maximumFractionDigits: 2 })}
       </button>
     );
   }
@@ -557,6 +602,7 @@ function GradeCellDisplay({
     const info = DESCRIPTIVE_LABELS[grade.descriptiveScore];
     return (
       <button
+        type="button"
         onClick={onClick}
         className={cn(
           "w-full h-9 rounded-md text-[10px] font-medium transition",

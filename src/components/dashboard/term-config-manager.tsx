@@ -14,10 +14,22 @@ import {
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { Loader2, CalendarDays, Save, AlertCircle } from "lucide-react";
+import {
+  Loader2,
+  CalendarDays,
+  Save,
+  AlertCircle,
+  AlertTriangle,
+  Building2,
+  Globe,
+  Activity,
+} from "lucide-react";
 import { calculateWeekParity } from "@/lib/timetable/week-parity";
 import { format } from "date-fns";
 import { faIR } from "date-fns/locale";
+import { cn } from "@/lib/utils";
+import { PageHeader } from "@/components/shared/page-header";
+import { ScrollReveal } from "@/components/shared/scroll-reveal";
 
 interface SchoolInfo {
   id: string;
@@ -25,6 +37,14 @@ interface SchoolInfo {
   subdomain: string;
   termStartDate: string | null;
   status: string;
+}
+
+interface SchoolInfoRow {
+  icon: typeof Building2;
+  label: string;
+  value: React.ReactNode;
+  dir?: "rtl" | "ltr";
+  mono?: boolean;
 }
 
 export function TermConfigManager() {
@@ -80,11 +100,10 @@ export function TermConfigManager() {
   }
 
   // Live preview of week-parity calculation
-  let parityPreview = null;
+  let parityPreview: ReturnType<typeof calculateWeekParity> | null = null;
   if (termDate) {
     const dt = new Date(termDate + "T00:00:00Z");
-    const result = calculateWeekParity(dt, new Date());
-    parityPreview = result;
+    parityPreview = calculateWeekParity(dt, new Date());
   }
 
   if (loading) {
@@ -95,121 +114,184 @@ export function TermConfigManager() {
     );
   }
 
+  const schoolRows: SchoolInfoRow[] = [
+    {
+      icon: Building2,
+      label: "نام مدرسه",
+      value: school?.name ?? "—",
+    },
+    {
+      icon: Globe,
+      label: "زیردامنه",
+      value: school?.subdomain ?? "—",
+      dir: "ltr",
+      mono: true,
+    },
+    {
+      icon: Activity,
+      label: "وضعیت",
+      value: (
+        <Badge
+          variant="default"
+          className={
+            school?.status === "ACTIVE"
+              ? "bg-emerald hover:bg-emerald"
+              : "bg-destructive hover:bg-destructive"
+          }
+        >
+          {school?.status === "ACTIVE" ? "فعال" : "معلق"}
+        </Badge>
+      ),
+    },
+  ];
+
   return (
     <div className="max-w-3xl mx-auto space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-navy flex items-center gap-2">
-          <CalendarDays className="h-6 w-6" />
-          تنظیمات سال تحصیلی
-        </h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          تنظیم تاریخ شروع ترم — مبنای محاسبه هفته‌های زوج و فرد.
-        </p>
-      </div>
+      <PageHeader
+        title="تنظیمات سال تحصیلی"
+        subtitle="تنظیم تاریخ شروع ترم — مبنای محاسبهٔ هفته‌های زوج و فرد."
+        icon={CalendarDays}
+      />
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base text-navy">مشخصات مدرسه</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-2">
-          <div className="flex justify-between">
-            <span className="text-sm text-muted-foreground">نام مدرسه</span>
-            <span className="font-medium">{school?.name}</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-sm text-muted-foreground">زیردامنه</span>
-            <span dir="ltr" className="font-mono text-sm">
-              {school?.subdomain}
-            </span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-sm text-muted-foreground">وضعیت</span>
-            <Badge variant="default" className="bg-emerald hover:bg-emerald">
-              {school?.status === "ACTIVE" ? "فعال" : "معلق"}
-            </Badge>
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base text-navy flex items-center gap-2">
-            <Save className="h-4 w-4" />
-            تاریخ شروع ترم
-          </CardTitle>
-          <CardDescription className="flex items-start gap-2">
-            <AlertCircle className="h-4 w-4 mt-0.5 text-info shrink-0" />
-            توصیه می‌شود اولین شنبه (Saturday) سال تحصیلی را انتخاب کنید. هفته‌ای که این
-            تاریخ در آن قرار دارد، به‌عنوان هفته ۱ (فرد) در نظر گرفته می‌شود.
-          </CardDescription>
-        </CardHeader>
-        <form onSubmit={onSubmit}>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="termDate">تاریخ شروع ترم</Label>
-              <Input
-                id="termDate"
-                type="date"
-                dir="ltr"
-                className="font-mono text-left"
-                value={termDate}
-                onChange={(e) => setTermDate(e.target.value)}
-              />
-              <p className="text-xs text-muted-foreground">
-                هجری شمسی پیشنهادی: ۱۴۰۴/۰۷/۰۱ (معادل 2025-09-23 میلادی — اولین شنبه سال تحصیلی ۱۴۰۴–۱۴۰۵)
-              </p>
-            </div>
-
-            {parityPreview && !parityPreview.isUnconfigured && (
-              <div className="rounded-lg border border-info/30 bg-info/5 p-3 text-sm">
-                <p className="font-medium text-navy mb-2">پیش‌نمایش محاسبه هفته:</p>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                  <div>
-                    <span className="text-muted-foreground">شماره هفته:</span>
-                    <span className="font-mono mr-2">
-                      {parityPreview.weekNumber.toLocaleString("fa-IR")}
+      {/* School info card */}
+      <ScrollReveal>
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base text-navy">
+              مشخصات مدرسه
+            </CardTitle>
+            <CardDescription>
+              اطلاعات پایهٔ مدرسه — قابل ویرایش توسط مدیر سامانه.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="divide-y">
+            {schoolRows.map((row, i) => {
+              const Icon = row.icon;
+              return (
+                <div
+                  key={row.label}
+                  className="stagger-item flex items-center justify-between gap-3 py-3 first:pt-0 last:pb-0"
+                  style={{ animationDelay: `${i * 30}ms` }}
+                >
+                  <div className="flex items-center gap-2 min-w-0">
+                    <div className="h-8 w-8 rounded-lg bg-navy/10 text-navy flex items-center justify-center shrink-0">
+                      <Icon className="h-4 w-4" />
+                    </div>
+                    <span className="text-sm text-muted-foreground">
+                      {row.label}
                     </span>
                   </div>
-                  <div>
-                    <span className="text-muted-foreground">نوع هفته:</span>
-                    <Badge
-                      variant="outline"
-                      className={
-                        parityPreview.parity === "ODD_WEEKS"
-                          ? "mr-2 bg-info/10 text-info"
-                          : "mr-2 bg-warning/10 text-warning"
-                      }
-                    >
-                      {parityPreview.parity === "ODD_WEEKS" ? "فرد" : "زوج"}
-                    </Badge>
-                  </div>
-                  {parityPreview.isPreTerm && (
-                    <div className="text-warning col-span-2">
-                      ⚠ تاریخ انتخاب‌شده در آینده است (پیش از شروع ترم).
-                    </div>
-                  )}
+                  <span
+                    dir={row.dir}
+                    className={cn(
+                      "text-sm font-medium text-left",
+                      row.mono && "font-mono tabular-nums"
+                    )}
+                  >
+                    {row.value}
+                  </span>
                 </div>
-              </div>
-            )}
+              );
+            })}
           </CardContent>
-          <CardFooter>
-            <Button
-              type="submit"
-              disabled={submitting}
-              className="bg-emerald hover:bg-emerald-dark"
-            >
-              {submitting ? (
-                <>
-                  <Loader2 className="ml-2 h-4 w-4 animate-spin" />
-                  در حال ذخیره...
-                </>
-              ) : (
-                "ذخیره"
+        </Card>
+      </ScrollReveal>
+
+      {/* Date input card */}
+      <ScrollReveal delay={80}>
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base text-navy flex items-center gap-2">
+              <Save className="h-4 w-4" />
+              تاریخ شروع ترم
+            </CardTitle>
+            <CardDescription className="flex items-start gap-2">
+              <AlertCircle className="h-4 w-4 mt-0.5 text-info shrink-0" />
+              توصیه می‌شود اولین شنبه (Saturday) سال تحصیلی را انتخاب کنید. هفته‌ای که این تاریخ در آن قرار دارد، به‌عنوان هفتهٔ ۱ (فرد) در نظر گرفته می‌شود.
+            </CardDescription>
+          </CardHeader>
+          <form onSubmit={onSubmit}>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="termDate" className="text-xs font-medium">
+                  تاریخ شروع ترم
+                </Label>
+                <Input
+                  id="termDate"
+                  type="date"
+                  dir="ltr"
+                  className="font-mono text-left tabular-nums"
+                  value={termDate}
+                  onChange={(e) => setTermDate(e.target.value)}
+                />
+                <p className="text-xs text-muted-foreground">
+                  هجری شمسی پیشنهادی: ۱۴۰۴/۰۷/۰۱ (معادل 2025-09-23 میلادی — اولین شنبهٔ سال تحصیلی ۱۴۰۴–۱۴۰۵)
+                </p>
+              </div>
+
+              {parityPreview && !parityPreview.isUnconfigured && (
+                <div className="rounded-lg border border-info/30 bg-info/5 p-3">
+                  <p className="text-sm font-medium text-navy mb-2 flex items-center gap-1.5">
+                    <CalendarDays className="h-4 w-4" />
+                    پیش‌نمایش محاسبهٔ هفته
+                  </p>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                    <div>
+                      <span className="text-xs text-muted-foreground">
+                        شماره هفته
+                      </span>
+                      <div className="font-mono tabular-nums mt-0.5">
+                        {parityPreview.weekNumber.toLocaleString("fa-IR")}
+                      </div>
+                    </div>
+                    <div>
+                      <span className="text-xs text-muted-foreground">
+                        نوع هفته
+                      </span>
+                      <div className="mt-0.5">
+                        <Badge
+                          variant="outline"
+                          className={
+                            parityPreview.parity === "ODD_WEEKS"
+                              ? "bg-info/10 text-info"
+                              : "bg-warning/10 text-warning"
+                          }
+                        >
+                          {parityPreview.parity === "ODD_WEEKS"
+                            ? "فرد"
+                            : "زوج"}
+                        </Badge>
+                      </div>
+                    </div>
+                    {parityPreview.isPreTerm && (
+                      <div className="col-span-2 sm:col-span-1 flex items-center gap-1.5 text-warning text-xs">
+                        <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                        تاریخ در آینده است (پیش از شروع ترم).
+                      </div>
+                    )}
+                  </div>
+                </div>
               )}
-            </Button>
-          </CardFooter>
-        </form>
-      </Card>
+            </CardContent>
+            <CardFooter>
+              <Button
+                type="submit"
+                disabled={submitting}
+                className="bg-emerald hover:bg-emerald-dark cursor-pointer"
+              >
+                {submitting ? (
+                  <>
+                    <Loader2 className="ml-2 h-4 w-4 animate-spin" />
+                    در حال ذخیره...
+                  </>
+                ) : (
+                  "ذخیره"
+                )}
+              </Button>
+            </CardFooter>
+          </form>
+        </Card>
+      </ScrollReveal>
     </div>
   );
 }

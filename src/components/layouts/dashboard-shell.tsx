@@ -14,15 +14,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import {
-  Avatar,
-  AvatarFallback,
-} from "@/components/ui/avatar";
-import {
-  Sheet,
-  SheetContent,
-  SheetTrigger,
-} from "@/components/ui/sheet";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import {
   School,
   Users,
@@ -35,7 +28,6 @@ import {
   ChevronDown,
   ShieldCheck,
   LayoutDashboard,
-  Settings,
   GraduationCap,
   DoorClosed,
   Clock,
@@ -88,6 +80,8 @@ const ROLE_ROUTE: Record<string, string> = {
   STUDENT: "/student",
 };
 
+const APP_VERSION = "۰.۱.۰";
+
 export function DashboardShell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -127,8 +121,8 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="min-h-screen flex flex-col bg-offwhite">
-      {/* Top bar */}
-      <header className="sticky top-0 z-30 h-16 border-b border-border bg-white/95 backdrop-blur flex items-center px-4 gap-3">
+      {/* Top bar — 56px height (h-14), compact px-4 */}
+      <header className="sticky top-0 z-30 h-14 border-b border-border bg-white/95 backdrop-blur flex items-center px-4 gap-3">
         {/* Mobile menu trigger */}
         <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
           <SheetTrigger asChild>
@@ -136,15 +130,9 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
               <Menu className="h-5 w-5" />
             </Button>
           </SheetTrigger>
-          <SheetContent side="right" className="w-72 p-0 bg-sidebar">
-            <div className="flex items-center gap-3 px-4 h-16 border-b border-sidebar-border">
-              <SamikLogo size={32} />
-              <div>
-                <p className="text-sm font-bold text-sidebar-foreground">سامیک</p>
-                <p className="text-xs text-sidebar-foreground/60">{schoolName}</p>
-              </div>
-            </div>
-            <div className="py-4">
+          <SheetContent side="right" className="w-70 p-0 bg-sidebar" style={{ width: 280 }}>
+            <SidebarHeader schoolName={schoolName} />
+            <div className="py-3">
               <NavLinks
                 items={visibleNav}
                 route={route}
@@ -152,21 +140,24 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
                 onNavigate={() => setMobileOpen(false)}
               />
             </div>
+            <SidebarFooter />
           </SheetContent>
         </Sheet>
 
-        {/* Breadcrumb / school name */}
+        {/* School name + role label — compact */}
         <div className="flex-1 min-w-0">
-          <p className="text-xs text-muted-foreground">{ROLE_LABEL[role]}</p>
-          <p className="text-sm font-semibold text-foreground truncate">
+          <p className="text-[11px] text-muted-foreground leading-tight truncate">
+            {ROLE_LABEL[role]}
+          </p>
+          <p className="text-sm font-semibold text-foreground truncate leading-tight">
             {schoolName}
           </p>
         </div>
 
-        {/* Profile switcher */}
+        {/* Profile switcher — compact avatar (h-8 w-8), name hidden on mobile */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" className="gap-2 pr-2 pl-3">
+            <Button variant="ghost" className="gap-2 pr-2 pl-2 h-9">
               <Avatar className="h-8 w-8 bg-navy text-white">
                 <AvatarFallback className="bg-navy text-white text-xs font-medium">
                   {initials}
@@ -203,36 +194,56 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
       </header>
 
       <div className="flex-1 flex">
-        {/* Desktop sidebar */}
-        <aside className="hidden lg:flex w-64 flex-col bg-sidebar border-l border-sidebar-border">
-          <div className="flex items-center gap-3 px-4 h-16 border-b border-sidebar-border">
-            <SamikLogo size={32} />
-            <div className="min-w-0">
-              <p className="text-sm font-bold text-sidebar-foreground">سامیک</p>
-              <p className="text-xs text-sidebar-foreground/60 truncate">
-                {schoolName}
-              </p>
-            </div>
-          </div>
-          <div className="flex-1 overflow-y-auto py-4">
+        {/* Desktop sidebar — 240px width (w-60), 56px header (h-14) */}
+        <aside className="hidden lg:flex w-60 flex-col bg-sidebar border-l border-sidebar-border">
+          <SidebarHeader schoolName={schoolName} />
+          <div className="flex-1 overflow-y-auto py-3">
             <NavLinks items={visibleNav} route={route} pathname={pathname} />
           </div>
-          <div className="border-t border-sidebar-border p-3">
-            <div className="rounded-lg bg-sidebar-accent/30 px-3 py-2">
-              <p className="text-xs text-sidebar-foreground/70">
-                نسخه ۰.۱.۰ — فاز اول
-              </p>
-            </div>
-          </div>
+          <SidebarFooter />
         </aside>
 
         {/* Main content */}
         <main className="flex-1 min-w-0 flex flex-col">
           <div className="flex-1 p-4 lg:p-6">{children}</div>
-          <footer className="mt-auto border-t border-border bg-white px-4 py-3 text-center text-xs text-muted-foreground">
+          {/* Footer — compact py-2, sticky to bottom */}
+          <footer className="mt-auto border-t border-border bg-white px-4 py-2 text-center text-xs text-muted-foreground">
             سامیک © ۱۴۰۴ — سامانه مدیریت یکپارچه کلاس
           </footer>
         </main>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Sidebar header — 56px height (h-14), compact logo + school name.
+ */
+function SidebarHeader({ schoolName }: { schoolName: string }) {
+  return (
+    <div className="flex items-center gap-2.5 px-3 h-14 border-b border-sidebar-border">
+      <SamikLogo size={28} />
+      <div className="min-w-0">
+        <p className="text-xs font-bold text-sidebar-foreground leading-tight">سامیک</p>
+        <p className="text-[11px] text-sidebar-foreground/60 truncate leading-tight">
+          {schoolName}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Sidebar footer — compact version badge.
+ */
+function SidebarFooter() {
+  return (
+    <div className="border-t border-sidebar-border px-3 py-2">
+      <div className="flex items-center justify-between rounded-md bg-sidebar-accent/30 px-2.5 py-1.5">
+        <span className="text-[11px] text-sidebar-foreground/70 tabular-nums">
+          نسخه {APP_VERSION}
+        </span>
+        <span className="text-[10px] text-sidebar-foreground/50">فاز اول</span>
       </div>
     </div>
   );
@@ -247,8 +258,8 @@ interface NavLinksProps {
 
 function NavLinks({ items, route, pathname, onNavigate }: NavLinksProps) {
   return (
-    <nav className="flex flex-col gap-1 px-3">
-      {items.map((item) => {
+    <nav className="flex flex-col gap-1 px-2">
+      {items.map((item, i) => {
         const href = `${route}/${item.href === "overview" ? "" : item.href}`;
         const isActive =
           pathname === href ||
@@ -256,14 +267,16 @@ function NavLinks({ items, route, pathname, onNavigate }: NavLinksProps) {
         const Icon = item.icon;
         return (
           <Link
-            key={item.href}
+            key={item.href + i}
             href={href}
             onClick={onNavigate}
+            style={{ animationDelay: `${i * 30}ms` }}
             className={cn(
-              "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors",
+              "stagger-item flex items-center gap-2.5 px-3 py-2 rounded-md text-sm font-medium",
+              "border-l-2 transition-colors duration-200 cursor-pointer",
               isActive
-                ? "bg-emerald text-white shadow-sm"
-                : "text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                ? "bg-emerald text-white shadow-sm border-l-emerald"
+                : "text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground border-l-transparent"
             )}
           >
             <Icon className="h-4 w-4 shrink-0" />

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, FormEvent } from "react";
+import { useEffect, useMemo, useState, FormEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -21,10 +21,32 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { toast } from "sonner";
-import { Loader2, Plus, School as SchoolIcon, Building2 } from "lucide-react";
+import {
+  Loader2,
+  Plus,
+  School as SchoolIcon,
+  Building2,
+  CheckCircle2,
+  PauseCircle,
+  MessageSquareText,
+  Trash2,
+  ChevronUp,
+  ChevronDown,
+  ChevronsUpDown,
+} from "lucide-react";
 import { format } from "date-fns";
 import { faIR } from "date-fns/locale";
+import { cn } from "@/lib/utils";
+import { PageHeader } from "@/components/shared/page-header";
+import { KpiCardGrid } from "@/components/shared/kpi-card";
+import { EmptyState } from "@/components/shared/empty-state";
 
 interface SchoolRow {
   id: string;
@@ -35,6 +57,9 @@ interface SchoolRow {
   createdAt: string;
   _count: { staffEmployments: number; enrollments: number; classrooms: number };
 }
+
+type SortKey = "name" | "createdAt" | "smsBalance" | "students" | "staff";
+type SortDir = "asc" | "desc";
 
 export function SchoolsManager() {
   const [schools, setSchools] = useState<SchoolRow[]>([]);
@@ -48,6 +73,8 @@ export function SchoolsManager() {
     principalFirstName: "",
     principalLastName: "",
   });
+  const [sortKey, setSortKey] = useState<SortKey>("createdAt");
+  const [sortDir, setSortDir] = useState<SortDir>("desc");
 
   async function load() {
     setLoading(true);
@@ -93,34 +120,112 @@ export function SchoolsManager() {
     }
   }
 
+  function toggleSort(key: SortKey) {
+    if (sortKey === key) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortKey(key);
+      setSortDir("asc");
+    }
+  }
+
+  const sortedSchools = useMemo(() => {
+    const arr = [...schools];
+    arr.sort((a, b) => {
+      let av: string | number;
+      let bv: string | number;
+      switch (sortKey) {
+        case "name":
+          av = a.name;
+          bv = b.name;
+          break;
+        case "smsBalance":
+          av = a.smsBalance;
+          bv = b.smsBalance;
+          break;
+        case "students":
+          av = a._count.enrollments;
+          bv = b._count.enrollments;
+          break;
+        case "staff":
+          av = a._count.staffEmployments;
+          bv = b._count.staffEmployments;
+          break;
+        case "createdAt":
+        default:
+          av = new Date(a.createdAt).getTime();
+          bv = new Date(b.createdAt).getTime();
+          break;
+      }
+      if (av < bv) return sortDir === "asc" ? -1 : 1;
+      if (av > bv) return sortDir === "asc" ? 1 : -1;
+      return 0;
+    });
+    return arr;
+  }, [schools, sortKey, sortDir]);
+
+  // KPI aggregates
+  const totalSchools = schools.length;
+  const activeSchools = schools.filter((s) => s.status === "ACTIVE").length;
+  const suspendedSchools = schools.filter(
+    (s) => s.status === "SUSPENDED"
+  ).length;
+  const totalSmsBalance = schools.reduce((sum, s) => sum + s.smsBalance, 0);
+
   return (
     <div className="max-w-6xl mx-auto space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-navy flex items-center gap-2">
-          <Building2 className="h-6 w-6" />
-          مدیریت مدارس
-        </h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          آنبوردینگ مدرسه جدید، تخصیص زیردامنه و مشاهده وضعیت لایسنس.
-        </p>
-      </div>
+      <PageHeader
+        title="مدارس"
+        subtitle="آنبوردینگ مدرسهٔ جدید، تخصیص زیردامنه و مشاهدهٔ وضعیت لایسنس."
+        icon={Building2}
+      />
+
+      <KpiCardGrid
+        cards={[
+          {
+            label: "کل مدارس",
+            value: totalSchools,
+            icon: Building2,
+            tint: "navy",
+          },
+          {
+            label: "مدارس فعال",
+            value: activeSchools,
+            icon: CheckCircle2,
+            tint: "emerald",
+          },
+          {
+            label: "مدارس معلق",
+            value: suspendedSchools,
+            icon: PauseCircle,
+            tint: "destructive",
+          },
+          {
+            label: "موجودی کل پیامک",
+            value: totalSmsBalance.toLocaleString("fa-IR"),
+            icon: MessageSquareText,
+            tint: "info",
+          },
+        ]}
+      />
 
       {/* Onboarding form */}
       <Card>
         <CardHeader>
           <CardTitle className="text-base text-navy flex items-center gap-2">
             <Plus className="h-4 w-4" />
-            ثبت مدرسه جدید
+            ثبت مدرسهٔ جدید
           </CardTitle>
           <CardDescription>
-            فرم زیر یک مدرسه جدید و مدیر اولیه آن را به‌صورت اتمیک ثبت می‌کند.
-            مدیر می‌تواند با شماره موبایل وارد شود.
+            فرم زیر یک مدرسهٔ جدید و مدیر اولیهٔ آن را به‌صورت اتمیک ثبت می‌کند. مدیر می‌تواند با شماره موبایل وارد شود.
           </CardDescription>
         </CardHeader>
         <form onSubmit={onSubmit}>
           <CardContent className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-2 sm:col-span-2">
-              <Label htmlFor="name">نام مدرسه</Label>
+              <Label htmlFor="name" className="text-xs font-medium">
+                نام مدرسه
+              </Label>
               <Input
                 id="name"
                 value={form.name}
@@ -130,7 +235,9 @@ export function SchoolsManager() {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="subdomain">زیردامنه</Label>
+              <Label htmlFor="subdomain" className="text-xs font-medium">
+                زیردامنه
+              </Label>
               <Input
                 id="subdomain"
                 value={form.subdomain}
@@ -139,27 +246,34 @@ export function SchoolsManager() {
                 }
                 placeholder="alborz"
                 dir="ltr"
-                className="text-left font-mono"
+                className="text-left font-mono tabular-nums"
                 required
               />
-              <p className="text-xs text-muted-foreground">
-                نتیجه: {form.subdomain || "alborz"}.samik.app
+              <p className="text-xs text-muted-foreground tabular-nums" dir="ltr">
+                {form.subdomain || "alborz"}.samik.app
               </p>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="phone">شماره موبایل مدیر</Label>
+              <Label htmlFor="phone" className="text-xs font-medium">
+                شماره موبایل مدیر
+              </Label>
               <Input
                 id="phone"
                 value={form.principalPhone}
-                onChange={(e) => setForm({ ...form, principalPhone: e.target.value })}
+                onChange={(e) =>
+                  setForm({ ...form, principalPhone: e.target.value })
+                }
                 placeholder="09123456789"
                 dir="ltr"
-                className="text-left font-mono"
+                inputMode="numeric"
+                className="text-left font-mono tabular-nums"
                 required
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="nc">کد ملی مدیر</Label>
+              <Label htmlFor="nc" className="text-xs font-medium">
+                کد ملی مدیر
+              </Label>
               <Input
                 id="nc"
                 value={form.principalNationalCode}
@@ -168,12 +282,15 @@ export function SchoolsManager() {
                 }
                 placeholder="1234567890"
                 dir="ltr"
-                className="text-left font-mono"
+                inputMode="numeric"
+                className="text-left font-mono tabular-nums"
                 required
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="fn">نام مدیر</Label>
+              <Label htmlFor="fn" className="text-xs font-medium">
+                نام مدیر
+              </Label>
               <Input
                 id="fn"
                 value={form.principalFirstName}
@@ -184,7 +301,9 @@ export function SchoolsManager() {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="ln">نام خانوادگی مدیر</Label>
+              <Label htmlFor="ln" className="text-xs font-medium">
+                نام خانوادگی مدیر
+              </Label>
               <Input
                 id="ln"
                 value={form.principalLastName}
@@ -199,7 +318,7 @@ export function SchoolsManager() {
             <Button
               type="submit"
               disabled={submitting}
-              className="bg-emerald hover:bg-emerald-dark"
+              className="bg-emerald hover:bg-emerald-dark cursor-pointer"
             >
               {submitting ? (
                 <>
@@ -218,8 +337,14 @@ export function SchoolsManager() {
       <Card>
         <CardHeader>
           <CardTitle className="text-base text-navy">
-            مدارس ثبت‌شده ({schools.length})
+            مدارس ثبت‌شده
+            <span className="text-muted-foreground font-normal mr-2 tabular-nums">
+              ({schools.length.toLocaleString("fa-IR")})
+            </span>
           </CardTitle>
+          <CardDescription>
+            برای مرتب‌سازی روی عنوان ستون‌ها کلیک کنید.
+          </CardDescription>
         </CardHeader>
         <CardContent>
           {loading ? (
@@ -227,63 +352,183 @@ export function SchoolsManager() {
               <Loader2 className="h-6 w-6 animate-spin text-navy" />
             </div>
           ) : schools.length === 0 ? (
-            <div className="text-center py-10 text-muted-foreground">
-              <SchoolIcon className="h-10 w-10 mx-auto mb-2 opacity-30" />
-              هنوز مدرسه‌ای ثبت نشده است.
-            </div>
+            <EmptyState
+              icon={SchoolIcon}
+              title="هنوز مدرسه‌ای ثبت نشده است."
+              description="با تکمیل فرم بالا، اولین مدرسهٔ پلتفرم را ثبت کنید."
+            />
           ) : (
-            <div className="rounded-lg border overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>نام مدرسه</TableHead>
-                    <TableHead>زیردامنه</TableHead>
-                    <TableHead>وضعیت</TableHead>
-                    <TableHead>موجودی پیامک</TableHead>
-                    <TableHead>پرسنل</TableHead>
-                    <TableHead>دانش‌آموزان</TableHead>
-                    <TableHead>کلاس‌ها</TableHead>
-                    <TableHead>تاریخ ثبت</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {schools.map((s) => (
-                    <TableRow key={s.id}>
-                      <TableCell className="font-medium">{s.name}</TableCell>
-                      <TableCell dir="ltr" className="font-mono text-xs">
-                        {s.subdomain}
-                      </TableCell>
-                      <TableCell>
-                        <Badge
-                          variant={s.status === "ACTIVE" ? "default" : "destructive"}
-                          className={
-                            s.status === "ACTIVE"
-                              ? "bg-emerald hover:bg-emerald"
-                              : ""
-                          }
-                        >
-                          {s.status === "ACTIVE" ? "فعال" : "معلق"}
-                        </Badge>
-                      </TableCell>
-                      <TableCell dir="ltr" className="font-mono">
-                        {s.smsBalance.toLocaleString("fa-IR")}
-                      </TableCell>
-                      <TableCell>{s._count.staffEmployments}</TableCell>
-                      <TableCell>{s._count.enrollments}</TableCell>
-                      <TableCell>{s._count.classrooms}</TableCell>
-                      <TableCell className="text-xs text-muted-foreground">
-                        {format(new Date(s.createdAt), "yyyy/MM/dd", {
-                          locale: faIR,
-                        })}
-                      </TableCell>
+            <div className="rounded-lg border overflow-hidden">
+              <div className="overflow-x-auto max-h-[28rem]">
+                <Table className="sticky-table-header">
+                  <TableHeader>
+                    <TableRow>
+                      <SortableHead
+                        label="نام مدرسه"
+                        active={sortKey === "name"}
+                        dir={sortDir}
+                        onClick={() => toggleSort("name")}
+                      />
+                      <TableHead>زیردامنه</TableHead>
+                      <TableHead>وضعیت</TableHead>
+                      <SortableHead
+                        label="موجودی پیامک"
+                        active={sortKey === "smsBalance"}
+                        dir={sortDir}
+                        onClick={() => toggleSort("smsBalance")}
+                        className="text-left"
+                      />
+                      <SortableHead
+                        label="پرسنل"
+                        active={sortKey === "staff"}
+                        dir={sortDir}
+                        onClick={() => toggleSort("staff")}
+                        className="text-left"
+                      />
+                      <SortableHead
+                        label="دانش‌آموزان"
+                        active={sortKey === "students"}
+                        dir={sortDir}
+                        onClick={() => toggleSort("students")}
+                        className="text-left"
+                      />
+                      <TableHead>کلاس‌ها</TableHead>
+                      <SortableHead
+                        label="تاریخ ثبت"
+                        active={sortKey === "createdAt"}
+                        dir={sortDir}
+                        onClick={() => toggleSort("createdAt")}
+                      />
+                      <TableHead className="text-left">عملیات</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                  </TableHeader>
+                  <TableBody>
+                    {sortedSchools.map((s, i) => (
+                      <TableRow
+                        key={s.id}
+                        className="data-table-row stagger-item"
+                        style={{ animationDelay: `${i * 30}ms` }}
+                      >
+                        <TableCell className="font-medium">{s.name}</TableCell>
+                        <TableCell
+                          dir="ltr"
+                          className="font-mono text-xs text-muted-foreground tabular-nums text-left"
+                        >
+                          {s.subdomain}
+                        </TableCell>
+                        <TableCell>
+                          <Badge
+                            variant={
+                              s.status === "ACTIVE" ? "default" : "destructive"
+                            }
+                            className={
+                              s.status === "ACTIVE"
+                                ? "bg-emerald hover:bg-emerald"
+                                : ""
+                            }
+                          >
+                            {s.status === "ACTIVE" ? "فعال" : "معلق"}
+                          </Badge>
+                        </TableCell>
+                        <TableCell
+                          dir="ltr"
+                          className="font-mono tabular-nums text-left"
+                        >
+                          {s.smsBalance.toLocaleString("fa-IR")}
+                        </TableCell>
+                        <TableCell className="tabular-nums">
+                          {s._count.staffEmployments.toLocaleString("fa-IR")}
+                        </TableCell>
+                        <TableCell className="tabular-nums">
+                          {s._count.enrollments.toLocaleString("fa-IR")}
+                        </TableCell>
+                        <TableCell className="tabular-nums">
+                          {s._count.classrooms.toLocaleString("fa-IR")}
+                        </TableCell>
+                        <TableCell className="text-xs text-muted-foreground tabular-nums">
+                          {format(new Date(s.createdAt), "yyyy/MM/dd", {
+                            locale: faIR,
+                          })}
+                        </TableCell>
+                        <TableCell>
+                          <TooltipProvider delayDuration={150}>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="text-destructive hover:text-destructive hover:bg-destructive/10 cursor-pointer h-8 w-8 p-0"
+                                  onClick={() => {
+                                    if (
+                                      !confirm(
+                                        `حذف مدرسهٔ «${s.name}»؟ این عملیات نیازمند تأیید مدیر سامانه است.`
+                                      )
+                                    )
+                                      return;
+                                    toast.info(
+                                      "حذف مدرسه در این نسخه از طریق پشتیبانی انجام می‌شود."
+                                    );
+                                  }}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent side="top">
+                                حذف مدرسه
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
             </div>
           )}
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+/* ── Sortable Table Header ── */
+function SortableHead({
+  label,
+  active,
+  dir,
+  onClick,
+  className,
+}: {
+  label: string;
+  active: boolean;
+  dir: SortDir;
+  onClick: () => void;
+  className?: string;
+}) {
+  const Icon = !active
+    ? ChevronsUpDown
+    : dir === "asc"
+      ? ChevronUp
+      : ChevronDown;
+  return (
+    <TableHead className={cn("p-0", className)}>
+      <button
+        type="button"
+        onClick={onClick}
+        className={cn(
+          "flex items-center gap-1.5 px-2 h-10 text-right font-medium cursor-pointer hover:text-navy transition-colors w-full",
+          active && "text-navy"
+        )}
+      >
+        <span>{label}</span>
+        <Icon
+          className={cn(
+            "h-3.5 w-3.5 shrink-0",
+            !active && "text-muted-foreground/60"
+          )}
+        />
+      </button>
+    </TableHead>
   );
 }

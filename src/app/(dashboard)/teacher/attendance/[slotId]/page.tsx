@@ -7,15 +7,15 @@ import { Badge } from "@/components/ui/badge";
 import {
   Card,
   CardContent,
-  CardHeader,
-  CardTitle,
 } from "@/components/ui/card";
 import { toast } from "sonner";
 import {
   Loader2,
   ArrowRight,
   CheckCircle2,
-  AlertCircle,
+  XCircle,
+  Clock,
+  FileText,
   WifiOff,
   CloudOff,
   Send,
@@ -24,6 +24,8 @@ import {
 import { AttendanceToggle, type AttendanceState } from "@/components/teacher/attendance-toggle";
 import { QuickPointButtons } from "@/components/teacher/quick-point-buttons";
 import { enqueueMutation, getQueueStatus, initBackgroundSync } from "@/lib/offline/sync-queue";
+import { PageHeader } from "@/components/shared/page-header";
+import { ScrollReveal } from "@/components/shared/scroll-reveal";
 import { cn } from "@/lib/utils";
 
 interface SlotInfo {
@@ -177,7 +179,7 @@ export default function RollCallPage() {
 
     toast.success(
       isOnline
-        ? `ثبت نهایی انجام شد. (${stats.present} حاضر، ${stats.absent} غایب، ${stats.late} تاخیر)`
+        ? `ثبت نهایی انجام شد. (${stats.present.toLocaleString("fa-IR")} حاضر، ${stats.absent.toLocaleString("fa-IR")} غایب، ${stats.late.toLocaleString("fa-IR")} تاخیر)`
         : `اینترنت قطع است! ثبت شما در صف همگام‌سازی قرار گرفت. به محض اتصال ارسال خواهد شد.`,
       { duration: 6000 }
     );
@@ -198,124 +200,133 @@ export default function RollCallPage() {
   if (!slot) return null;
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6 pb-32">
-      {/* Header */}
-      <div className="space-y-3">
-        <button
-          onClick={() => router.push("/teacher")}
-          className="flex items-center gap-1 text-sm text-muted-foreground hover:text-navy transition"
-        >
-          <ArrowRight className="h-4 w-4" />
-          بازگشت به داشبورد
-        </button>
-        <div className="flex items-start justify-between gap-3 flex-wrap">
-          <div>
-            <h1 className="text-2xl font-bold text-navy">{slot.subjectTitle}</h1>
-            <p className="text-sm text-muted-foreground mt-1">
-              {slot.classroomName} • {slot.bellTitle} •{" "}
-              <span dir="ltr" className="font-mono">
-                {slot.startTime}–{slot.endTime}
-              </span>
-            </p>
-          </div>
-          <Badge variant="outline" className="bg-emerald/10 text-emerald border-emerald/30">
-            <Users className="h-3 w-3 ml-1" />
-            {stats.total} دانش‌آموز
-          </Badge>
+    <div className="max-w-4xl mx-auto space-y-5 pb-28">
+      <PageHeader
+        title={slot.subjectTitle}
+        subtitle={
+          <>
+            {slot.classroomName} • {slot.bellTitle} •{" "}
+            <span dir="ltr" className="font-mono tabular-nums">
+              {slot.startTime}–{slot.endTime}
+            </span>
+          </>
+        }
+        icon={Users}
+        actions={
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => router.push("/teacher")}
+            className="h-8 gap-1.5 text-xs"
+          >
+            <ArrowRight className="h-4 w-4" />
+            بازگشت به داشبورد
+          </Button>
+        }
+      />
+
+      {/* Stats summary — 4 compact color-coded boxes */}
+      <ScrollReveal>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+          <StatBox label="حاضر" value={stats.present} color="emerald" icon={<CheckCircle2 className="h-3.5 w-3.5" />} />
+          <StatBox label="غایب" value={stats.absent} color="destructive" icon={<XCircle className="h-3.5 w-3.5" />} />
+          <StatBox label="تاخیر" value={stats.late} color="warning" icon={<Clock className="h-3.5 w-3.5" />} />
+          <StatBox label="موجه" value={stats.excused} color="info" icon={<FileText className="h-3.5 w-3.5" />} />
         </div>
-      </div>
+      </ScrollReveal>
 
-      {/* Stats summary */}
-      <div className="grid grid-cols-4 gap-2">
-        <StatBox label="حاضر" value={stats.present} color="emerald" />
-        <StatBox label="غایب" value={stats.absent} color="destructive" />
-        <StatBox label="تاخیر" value={stats.late} color="warning" />
-        <StatBox label="موجه" value={stats.excused} color="info" />
-      </div>
-
-      {/* Offline banner */}
+      {/* Offline banner — compact */}
       {!isOnline && (
-        <div className="flex items-center gap-2 p-3 rounded-lg bg-warning/10 border border-warning/30 text-warning text-sm">
-          <WifiOff className="h-4 w-4" />
+        <div className="flex items-center gap-2 p-2 rounded-lg bg-warning/10 border border-warning/30 text-warning text-xs">
+          <WifiOff className="h-3.5 w-3.5 shrink-0" />
           شما آفلاین هستید. ثبت شما در صف همگام‌سازی قرار می‌گیرد و به محض اتصال ارسال خواهد شد.
         </div>
       )}
       {hasPendingInQueue && (
-        <div className="flex items-center gap-2 p-3 rounded-lg bg-info/10 border border-info/30 text-info text-sm">
-          <CloudOff className="h-4 w-4" />
-          {queueStatus.pending} درخواست در صف انتظار، {queueStatus.failed} ناموفق (در حال تلاش مجدد...)
+        <div className="flex items-center gap-2 p-2 rounded-lg bg-info/10 border border-info/30 text-info text-xs">
+          <CloudOff className="h-3.5 w-3.5 shrink-0" />
+          <span className="tabular-nums">
+            {queueStatus.pending.toLocaleString("fa-IR")} درخواست در صف انتظار، {queueStatus.failed.toLocaleString("fa-IR")} ناموفق (در حال تلاش مجدد...)
+          </span>
         </div>
       )}
 
       {/* Student list */}
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base text-navy flex items-center justify-between">
-            <span>لیست حضور و غیاب</span>
-            <span className="text-xs text-muted-foreground font-normal">
-              همه به‌صورت پیش‌فرض حاضر هستند
-            </span>
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="p-0">
-          <div className="divide-y divide-border">
-            {students.map((student, idx) => {
-              const state = attendance.get(student.id) ?? "PRESENT";
-              return (
-                <div
-                  key={student.id}
-                  className={cn(
-                    "flex items-center gap-3 p-3 transition-colors",
-                    state === "ABSENT" && "bg-destructive/5",
-                    state === "LATE" && "bg-warning/5",
-                    state === "EXCUSED" && "bg-info/5"
-                  )}
-                >
-                  <span className="text-xs text-muted-foreground font-mono w-6 text-center">
-                    {(idx + 1).toLocaleString("fa-IR")}
-                  </span>
-                  <div className="flex-1 min-w-0">
-                    <p className="font-medium text-foreground truncate">
-                      {student.fullName}
-                    </p>
+      <ScrollReveal delay={60}>
+        <Card>
+          <CardContent className="p-0">
+            <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-border">
+              <div className="flex items-center gap-2">
+                <span className="font-medium text-sm text-navy">لیست حضور و غیاب</span>
+                <Badge variant="outline" className="bg-emerald/10 text-emerald border-emerald/30 text-[10px] tabular-nums">
+                  <Users className="h-3 w-3" />
+                  {stats.total.toLocaleString("fa-IR")} دانش‌آموز
+                </Badge>
+              </div>
+              <span className="text-xs text-muted-foreground">
+                همه به‌صورت پیش‌فرض حاضر هستند
+              </span>
+            </div>
+            <div className="divide-y divide-border">
+              {students.map((student, idx) => {
+                const state = attendance.get(student.id) ?? "PRESENT";
+                return (
+                  <div
+                    key={student.id}
+                    className={cn(
+                      "stagger-item data-table-row flex items-center gap-3 p-2.5 transition-colors",
+                      state === "ABSENT" && "bg-destructive/5",
+                      state === "LATE" && "bg-warning/5",
+                      state === "EXCUSED" && "bg-info/5"
+                    )}
+                    style={{ animationDelay: `${idx * 30}ms` }}
+                  >
+                    <span className="text-xs text-muted-foreground font-mono tabular-nums w-6 text-center shrink-0">
+                      {(idx + 1).toLocaleString("fa-IR")}
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-sm text-foreground truncate">
+                        {student.fullName}
+                      </p>
+                    </div>
+                    <QuickPointButtons
+                      studentUserId={student.id}
+                      studentName={student.fullName}
+                      size="sm"
+                    />
+                    <AttendanceToggle
+                      value={state}
+                      onChange={(next) => setStudentStatus(student.id, next)}
+                      size="sm"
+                    />
                   </div>
-                  <QuickPointButtons
-                    studentUserId={student.id}
-                    studentName={student.fullName}
-                    size="sm"
-                  />
-                  <AttendanceToggle
-                    value={state}
-                    onChange={(next) => setStudentStatus(student.id, next)}
-                    size="sm"
-                  />
-                </div>
-              );
-            })}
-          </div>
-        </CardContent>
-      </Card>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      </ScrollReveal>
 
-      {/* Commit button — fixed at bottom */}
-      <div className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-border p-4">
-        <div className="max-w-4xl mx-auto flex items-center gap-3">
-          <div className="flex-1 text-sm text-muted-foreground">
-            {stats.present} حاضر • {stats.absent} غایب • {stats.late} تاخیر • {stats.excused} موجه
+      {/* Commit bar — fixed at bottom, compact py-2 */}
+      <div className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-border py-2">
+        <div className="max-w-4xl mx-auto flex items-center gap-3 px-4">
+          <div className="flex-1 text-xs text-muted-foreground tabular-nums">
+            {stats.present.toLocaleString("fa-IR")} حاضر • {stats.absent.toLocaleString("fa-IR")} غایب • {stats.late.toLocaleString("fa-IR")} تاخیر • {stats.excused.toLocaleString("fa-IR")} موجه
           </div>
           <Button
             onClick={handleCommit}
             disabled={submitting}
             size="lg"
-            className="bg-emerald hover:bg-emerald-dark h-12 px-8 text-base gap-2 shadow-lg shadow-emerald/20"
+            className="bg-emerald hover:bg-emerald-dark h-10 px-6 text-sm gap-2 shadow-lg shadow-emerald/20"
           >
             {submitting ? (
               <>
-                <Loader2 className="h-5 w-5 animate-spin" />
+                <Loader2 className="h-4 w-4 animate-spin" />
                 در حال ثبت...
               </>
             ) : (
               <>
-                <Send className="h-5 w-5" />
+                <Send className="h-4 w-4" />
                 ثبت نهایی لیست
               </>
             )}
@@ -330,10 +341,12 @@ function StatBox({
   label,
   value,
   color,
+  icon,
 }: {
   label: string;
   value: number;
   color: "emerald" | "destructive" | "warning" | "info";
+  icon: React.ReactNode;
 }) {
   const colorMap = {
     emerald: "bg-emerald/10 text-emerald border-emerald/20",
@@ -342,9 +355,14 @@ function StatBox({
     info: "bg-info/10 text-info border-info/20",
   };
   return (
-    <div className={cn("rounded-xl border p-3 text-center", colorMap[color])}>
-      <div className="text-2xl font-bold">{value.toLocaleString("fa-IR")}</div>
-      <div className="text-xs">{label}</div>
+    <div className={cn("rounded-lg border p-2.5 flex items-center gap-2", colorMap[color])}>
+      <div className="shrink-0">{icon}</div>
+      <div className="min-w-0">
+        <div className="text-xl font-bold tabular-nums leading-none">
+          {value.toLocaleString("fa-IR")}
+        </div>
+        <div className="text-[11px] mt-0.5">{label}</div>
+      </div>
     </div>
   );
 }

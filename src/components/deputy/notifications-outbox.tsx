@@ -2,12 +2,11 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
@@ -20,6 +19,12 @@ import {
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { toast } from "sonner";
 import {
   Loader2,
@@ -28,13 +33,16 @@ import {
   Trash2,
   Edit3,
   CheckCircle2,
-  Phone,
-  Users,
+  Mail,
   CheckSquare,
   Square,
-  Mail,
+  RefreshCw,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { PageHeader } from "@/components/shared/page-header";
+import { KpiCardGrid } from "@/components/shared/kpi-card";
+import { ScrollReveal } from "@/components/shared/scroll-reveal";
+import { EmptyState } from "@/components/shared/empty-state";
 
 interface OutboxItem {
   id: string;
@@ -162,151 +170,209 @@ export function NotificationsOutbox() {
 
   const draftCount = drafts.length;
   const sentToday = items.filter((i) => i.status === "SENT").length;
+  const allSelected = draftCount > 0 && selected.size === draftCount;
+
+  // Bulk-send action button — emerald bg, shows selected count, loading state.
+  const bulkSendAction = draftCount > 0 && (
+    <Button
+      onClick={sendBulk}
+      disabled={sending || selected.size === 0}
+      className="bg-emerald hover:bg-emerald-dark shadow-lg shadow-emerald/20"
+    >
+      {sending ? (
+        <Loader2 className="h-4 w-4 animate-spin" />
+      ) : (
+        <Send className="h-4 w-4" />
+      )}
+      ارسال گروهی
+      <span className="tabular-nums">
+        ({selected.size > 0 ? selected.size.toLocaleString("fa-IR") : "۰"})
+      </span>
+    </Button>
+  );
 
   return (
     <div className="max-w-5xl mx-auto space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <div>
-          <h1 className="text-2xl font-bold text-navy flex items-center gap-2">
-            <Bell className="h-6 w-6" />
-            کارتابل پیامک
-          </h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            پیش‌نویس پیامک‌های غیبت — ویرایش، حذف یا ارسال گروهی.
-          </p>
-        </div>
-        {draftCount > 0 && (
-          <Button
-            onClick={sendBulk}
-            disabled={sending || selected.size === 0}
-            className="bg-emerald hover:bg-emerald-dark gap-2 shadow-lg shadow-emerald/20"
-          >
-            {sending ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Send className="h-4 w-4" />
-            )}
-            ارسال پیامک گروهی ({selected.size > 0 ? selected.size.toLocaleString("fa-IR") : "۰"})
-          </Button>
-        )}
-      </div>
+      <PageHeader
+        title="کارتابل پیامک"
+        subtitle="پیش‌نویس پیامک‌های غیبت — ویرایش، حذف یا ارسال گروهی به اولیا."
+        icon={Bell}
+        actions={bulkSendAction}
+      />
 
-      {/* Stats */}
-      <div className="grid grid-cols-3 gap-3">
-        <div className="rounded-xl border border-warning/20 bg-warning/5 p-3 text-center">
-          <div className="text-2xl font-bold text-warning">{draftCount.toLocaleString("fa-IR")}</div>
-          <div className="text-xs text-muted-foreground">در انتظار ارسال</div>
-        </div>
-        <div className="rounded-xl border border-emerald/20 bg-emerald/5 p-3 text-center">
-          <div className="text-2xl font-bold text-emerald">{sentToday.toLocaleString("fa-IR")}</div>
-          <div className="text-xs text-muted-foreground">ارسال‌شده امروز</div>
-        </div>
-        <div className="rounded-xl border border-border bg-muted/20 p-3 text-center">
-          <div className="text-2xl font-bold text-foreground">{selected.size.toLocaleString("fa-IR")}</div>
-          <div className="text-xs text-muted-foreground">انتخاب‌شده</div>
-        </div>
-      </div>
+      {/* KPI row — 3 cards: pending / sent today / selected */}
+      <KpiCardGrid
+        cards={[
+          {
+            label: "در انتظار ارسال",
+            value: draftCount,
+            icon: Mail,
+            tint: "warning",
+          },
+          {
+            label: "ارسال‌شده امروز",
+            value: sentToday,
+            icon: CheckCircle2,
+            tint: "emerald",
+          },
+          {
+            label: "انتخاب‌شده",
+            value: selected.size,
+            icon: Send,
+            tint: "navy",
+          },
+        ]}
+      />
 
-      {/* List */}
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base text-navy flex items-center justify-between">
-            <span>پیش‌نویس‌ها ({draftCount})</span>
-            {draftCount > 0 && (
-              <button
-                onClick={selectAll}
-                className="text-xs text-navy hover:underline flex items-center gap-1"
-              >
-                {selected.size === drafts.length ? (
-                  <><Square className="h-3.5 w-3.5" /> لغو انتخاب همه</>
-                ) : (
-                  <><CheckSquare className="h-3.5 w-3.5" /> انتخاب همه</>
-                )}
-              </button>
-            )}
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {loading ? (
-            <div className="flex justify-center py-10">
-              <Loader2 className="h-6 w-6 animate-spin text-navy" />
-            </div>
-          ) : draftCount === 0 ? (
-            <div className="text-center py-10 text-muted-foreground">
-              <CheckCircle2 className="h-10 w-10 mx-auto mb-2 text-emerald/40" />
-              هیچ پیش‌نویس پیامکی در انتظار نیست.
-            </div>
-          ) : (
-            <div className="space-y-2">
-              {drafts.map((item) => (
-                <div
-                  key={item.id}
-                  className={cn(
-                    "flex items-start gap-3 p-3 rounded-lg border transition-all",
-                    selected.has(item.id)
-                      ? "border-emerald bg-emerald/5"
-                      : "border-border hover:border-navy/30"
-                  )}
-                >
-                  {/* Checkbox */}
+      {/* Drafts list */}
+      <ScrollReveal delay={120}>
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base text-navy flex items-center justify-between gap-2 flex-wrap">
+              <span className="flex items-center gap-2">
+                پیش‌نویس‌ها
+                <Badge variant="outline" className="text-xs tabular-nums">
+                  {draftCount.toLocaleString("fa-IR")}
+                </Badge>
+              </span>
+              <div className="flex items-center gap-3">
+                {/* Polling indicator */}
+                <span className="text-[11px] text-muted-foreground/80 flex items-center gap-1">
+                  <RefreshCw className="h-3 w-3" />
+                  به‌روزرسانی خودکار هر ۵ ثانیه
+                </span>
+                {draftCount > 0 && (
                   <button
-                    onClick={() => toggleSelect(item.id)}
-                    className="mt-1 shrink-0"
+                    onClick={selectAll}
+                    className="text-xs text-navy hover:text-navy-dark hover:underline flex items-center gap-1.5 cursor-pointer transition-colors"
                   >
-                    {selected.has(item.id) ? (
-                      <CheckSquare className="h-5 w-5 text-emerald" />
+                    {allSelected ? (
+                      <>
+                        <Square className="h-3.5 w-3.5" />
+                        لغو انتخاب همه
+                      </>
                     ) : (
-                      <Square className="h-5 w-5 text-muted-foreground" />
+                      <>
+                        <CheckSquare className="h-3.5 w-3.5" />
+                        انتخاب همه
+                      </>
                     )}
                   </button>
+                )}
+              </div>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {loading ? (
+              <div className="flex justify-center py-10">
+                <Loader2 className="h-6 w-6 animate-spin text-navy" />
+              </div>
+            ) : draftCount === 0 ? (
+              <EmptyState
+                icon={CheckCircle2}
+                title="هیچ پیش‌نویس پیامکی در انتظار نیست."
+                description="به‌محض ثبت غیبت توسط معلمان، پیش‌نویس پیامک‌ها در اینجا نمایش داده می‌شوند."
+              />
+            ) : (
+              <div className="space-y-2">
+                {drafts.map((item, i) => {
+                  const isSelected = selected.has(item.id);
+                  return (
+                    <div
+                      key={item.id}
+                      className={cn(
+                        "stagger-item flex items-start gap-3 p-3 rounded-lg border transition-all",
+                        isSelected
+                          ? "border-emerald bg-emerald/5"
+                          : "border-border hover:border-navy/30"
+                      )}
+                      style={{ animationDelay: `${i * 30}ms` }}
+                    >
+                      {/* Custom-styled checkbox (shadcn/Radix — not default browser) */}
+                      <div className="pt-0.5 shrink-0">
+                        <Checkbox
+                          checked={isSelected}
+                          onCheckedChange={() => toggleSelect(item.id)}
+                          aria-label={`انتخاب ${item.studentName}`}
+                          className="data-[state=checked]:bg-emerald data-[state=checked]:border-emerald cursor-pointer"
+                        />
+                      </div>
 
-                  {/* Content */}
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-medium text-sm">{item.studentName}</span>
-                      <Badge variant="outline" className="text-[10px] bg-warning/10 text-warning border-warning/30">
-                        غیبت
-                      </Badge>
-                      <span className="text-xs text-muted-foreground" dir="ltr">
-                        {item.recipientPhone}
-                      </span>
-                      <span className="text-xs text-muted-foreground">
-                        • {new Date(item.createdAt).toLocaleTimeString("fa-IR")}
-                      </span>
+                      {/* Content */}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-medium text-sm">{item.studentName}</span>
+                          <Badge
+                            variant="outline"
+                            className="text-[10px] bg-warning/10 text-warning border-warning/30"
+                          >
+                            غیبت
+                          </Badge>
+                          <span
+                            className="text-xs text-muted-foreground tabular-nums font-mono"
+                            dir="ltr"
+                          >
+                            {item.recipientPhone}
+                          </span>
+                          <span className="text-xs text-muted-foreground flex items-center gap-1">
+                            <span>•</span>
+                            <span dir="ltr" className="tabular-nums font-mono">
+                              {new Date(item.createdAt).toLocaleTimeString("fa-IR")}
+                            </span>
+                          </span>
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-1 line-clamp-2 leading-relaxed">
+                          {item.messageBody}
+                        </p>
+                      </div>
+
+                      {/* Actions */}
+                      <div className="flex items-center gap-1 shrink-0">
+                        <TooltipProvider delayDuration={200}>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => handleEdit(item)}
+                                className="h-8 w-8 text-info hover:text-info hover:bg-info/10 cursor-pointer"
+                                aria-label="ویرایش متن پیامک"
+                              >
+                                <Edit3 className="h-4 w-4" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent side="top">
+                              <span>ویرایش متن</span>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                        <TooltipProvider delayDuration={200}>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => discard(item.id, item.studentName)}
+                                className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10 cursor-pointer"
+                                aria-label="حذف پیش‌نویس"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent side="top">
+                              <span>حذف پیش‌نویس</span>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      </div>
                     </div>
-                    <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
-                      {item.messageBody}
-                    </p>
-                  </div>
-
-                  {/* Actions */}
-                  <div className="flex items-center gap-1 shrink-0">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleEdit(item)}
-                      className="text-info hover:text-info hover:bg-info/10"
-                      title="ویرایش متن"
-                    >
-                      <Edit3 className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => discard(item.id, item.studentName)}
-                      className="text-destructive hover:text-destructive hover:bg-destructive/10"
-                      title="حذف پیش‌نویس"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+                  );
+                })}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </ScrollReveal>
 
       {/* Edit dialog */}
       <Dialog open={!!editing} onOpenChange={(o) => !o && setEditing(null)}>
@@ -318,30 +384,39 @@ export function NotificationsOutbox() {
             <div>
               <Label className="text-xs text-muted-foreground">گیرنده</Label>
               <p className="text-sm font-medium mt-0.5">
-                {editing?.studentName} • <span dir="ltr">{editing?.recipientPhone}</span>
+                {editing?.studentName} •{" "}
+                <span dir="ltr" className="tabular-nums font-mono">
+                  {editing?.recipientPhone}
+                </span>
               </p>
             </div>
             <div className="space-y-1.5">
-              <Label>متن پیامک</Label>
+              <Label className="text-xs font-medium">متن پیامک</Label>
               <Textarea
                 autoFocus
                 value={editText}
                 onChange={(e) => setEditText(e.target.value)}
                 rows={4}
                 maxLength={500}
-                className="resize-none"
+                className="resize-none tabular-nums"
               />
-              <p className="text-xs text-muted-foreground text-left">
+              <p className="text-xs text-muted-foreground text-left tabular-nums">
                 {editText.length.toLocaleString("fa-IR")} / ۵۰۰
               </p>
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setEditing(null)}>انصراف</Button>
+            <Button
+              variant="outline"
+              onClick={() => setEditing(null)}
+              className="cursor-pointer"
+            >
+              انصراف
+            </Button>
             <Button
               onClick={saveEdit}
               disabled={!editText.trim()}
-              className="bg-emerald hover:bg-emerald-dark"
+              className="bg-emerald hover:bg-emerald-dark cursor-pointer"
             >
               ذخیره
             </Button>

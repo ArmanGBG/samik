@@ -33,7 +33,10 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { hhmmToPersian } from "@/lib/timetable/time-utils";
-import { dayToPersian } from "@/lib/timetable/days";
+import { PageHeader } from "@/components/shared/page-header";
+import { KpiCardGrid } from "@/components/shared/kpi-card";
+import { ScrollReveal } from "@/components/shared/scroll-reveal";
+import { EmptyState } from "@/components/shared/empty-state";
 
 interface AbsenteeEntry {
   id: string; // unique key for list
@@ -218,258 +221,255 @@ export function DeputyLiveDashboard() {
     negativePoints: behavioral.filter((b) => b.pointType === "NEGATIVE").length,
   };
 
+  // SSE connection badge — compact pill, emerald when connected / red pulse when disconnected.
+  const sseBadge = (
+    <Badge
+      variant="outline"
+      className={cn(
+        "text-xs px-2 py-0.5 gap-1.5 font-medium",
+        connected
+          ? "bg-emerald/10 text-emerald border-emerald/30"
+          : "bg-destructive/10 text-destructive border-destructive/30"
+      )}
+    >
+      {connected ? (
+        <>
+          <Wifi className="h-3 w-3" />
+          متصل (SSE)
+        </>
+      ) : (
+        <>
+          <WifiOff className="h-3 w-3 animate-pulse" />
+          در حال اتصال...
+        </>
+      )}
+    </Badge>
+  );
+
   return (
     <div className="max-w-7xl mx-auto space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <div>
-          <h1 className="text-2xl font-bold text-navy flex items-center gap-2">
-            <Activity className="h-6 w-6" />
-            داشبورد زنده
-          </h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            مانیتورینگ درلحظه حضور و غیاب و انضباط مدرسه
-          </p>
-        </div>
-        <Badge
-          variant="outline"
-          className={cn(
-            "gap-1.5",
-            connected
-              ? "bg-emerald/10 text-emerald border-emerald/30"
-              : "bg-destructive/10 text-destructive border-destructive/30"
-          )}
-        >
-          {connected ? (
-            <>
-              <Wifi className="h-3 w-3" />
-              متصل (SSE)
-            </>
-          ) : (
-            <>
-              <WifiOff className="h-3 w-3 animate-pulse" />
-              در حال اتصال...
-            </>
-          )}
-        </Badge>
-      </div>
+      <PageHeader
+        title="داشبورد زنده"
+        subtitle="مانیتورینگ درلحظه حضور و غیاب و انضباط مدرسه"
+        icon={Activity}
+        actions={sseBadge}
+      />
 
-      {/* Stats */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <StatCard
-          label="کلاس‌های در حال برگزاری"
-          value={stats.pendingCount}
-          icon={<Clock className="h-4 w-4" />}
-          tint="bg-info/10 text-info border-info/20"
-        />
-        <StatCard
-          label="غایبین امروز"
-          value={stats.absenteesCount}
-          icon={<AlertCircle className="h-4 w-4" />}
-          tint="bg-destructive/10 text-destructive border-destructive/20"
-        />
-        <StatCard
-          label="امتیازات مثبت"
-          value={stats.positivePoints}
-          icon={<ThumbsUp className="h-4 w-4" />}
-          tint="bg-emerald/10 text-emerald border-emerald/20"
-        />
-        <StatCard
-          label="امتیازات منفی"
-          value={stats.negativePoints}
-          icon={<ThumbsDown className="h-4 w-4" />}
-          tint="bg-warning/10 text-warning border-warning/20"
-        />
-      </div>
+      {/* KPI row */}
+      <KpiCardGrid
+        cards={[
+          {
+            label: "کلاس‌های در حال برگزاری",
+            value: stats.pendingCount,
+            icon: Clock,
+            tint: "info",
+          },
+          {
+            label: "غایبین امروز",
+            value: stats.absenteesCount,
+            icon: AlertCircle,
+            tint: "destructive",
+          },
+          {
+            label: "امتیازات مثبت",
+            value: stats.positivePoints,
+            icon: ThumbsUp,
+            tint: "emerald",
+          },
+          {
+            label: "امتیازات منفی",
+            value: stats.negativePoints,
+            icon: ThumbsDown,
+            tint: "warning",
+          },
+        ]}
+      />
 
       {/* Two-column layout */}
       <div className="grid lg:grid-cols-2 gap-6">
         {/* Pending Classes */}
+        <ScrollReveal delay={120}>
+          <Card className="h-full">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base text-navy flex items-center gap-2">
+                <Clock className="h-4 w-4" />
+                کلاس‌های در حال برگزاری
+                <Badge variant="outline" className="text-xs mr-1 tabular-nums">
+                  {pendingClasses.length.toLocaleString("fa-IR")}
+                </Badge>
+              </CardTitle>
+              <CardDescription>
+                کلاس‌هایی که زنگ آن‌ها شروع شده اما هنوز ثبت نهایی نشده‌اند.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {loadingPending ? (
+                <div className="flex justify-center py-8">
+                  <Loader2 className="h-5 w-5 animate-spin text-navy" />
+                </div>
+              ) : pendingClasses.length === 0 ? (
+                <EmptyState
+                  icon={CheckCircle2}
+                  title="هیچ کلاسی در حال برگزاری نیست."
+                  description="زنگ‌های فعال به‌محض شروع در اینجا نمایش داده می‌شوند."
+                />
+              ) : (
+                <div className="space-y-2 max-h-96 overflow-y-auto">
+                  {pendingClasses.map((c, i) => (
+                    <div
+                      key={`${c.classroomName}-${c.bellTitle}-${i}`}
+                      className={cn(
+                        "stagger-item flex items-center gap-3 p-3 rounded-lg border",
+                        c.minutesSinceStart > 10
+                          ? "border-warning/30 bg-warning/5"
+                          : "border-border"
+                      )}
+                      style={{ animationDelay: `${i * 30}ms` }}
+                    >
+                      <div className="flex-1 min-w-0">
+                        <div className="font-medium text-sm">
+                          {c.classroomName} — {c.subjectTitle}
+                        </div>
+                        <div className="text-xs text-muted-foreground mt-0.5">
+                          {c.teacherName} • {c.bellTitle}
+                        </div>
+                      </div>
+                      <div className="text-left shrink-0">
+                        <div className="text-xs text-muted-foreground tabular-nums font-mono">
+                          {hhmmToPersian(c.startTime)}–{hhmmToPersian(c.endTime)}
+                        </div>
+                        <div
+                          className={cn(
+                            "text-xs font-bold tabular-nums",
+                            c.minutesSinceStart > 10
+                              ? "text-warning"
+                              : "text-muted-foreground"
+                          )}
+                        >
+                          {c.minutesSinceStart.toLocaleString("fa-IR")} دقیقه
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </ScrollReveal>
+
+        {/* Live Absentees Feed */}
+        <ScrollReveal delay={180}>
+          <Card className="h-full">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base text-navy flex items-center gap-2">
+                <AlertCircle className="h-4 w-4" />
+                استریم زنده غایبین
+                <Badge variant="outline" className="text-xs mr-1 tabular-nums">
+                  {absentees.length.toLocaleString("fa-IR")}
+                </Badge>
+              </CardTitle>
+              <CardDescription>
+                به محض ثبت توسط معلمان، غایبین و تاخیری‌ها در این لیست ظاهر می‌شوند.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {absentees.length === 0 ? (
+                <EmptyState
+                  icon={Users}
+                  title="هنوز غایبی ثبت نشده است."
+                  description="با ثبت حضور و غیاب توسط معلمان، فهرست غایبین به‌روز می‌شود."
+                />
+              ) : (
+                <div className="space-y-2 max-h-96 overflow-y-auto">
+                  {absentees.map((a, i) => (
+                    <AbsenteeRow key={a.id} absentee={a} index={i} />
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </ScrollReveal>
+      </div>
+
+      {/* Behavioral Points Feed */}
+      <ScrollReveal delay={240}>
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-base text-navy flex items-center gap-2">
-              <Clock className="h-4 w-4" />
-              کلاس‌های در حال برگزاری
-              <Badge variant="outline" className="text-xs mr-1">
-                {pendingClasses.length}
+              <ThumbsUp className="h-4 w-4" />
+              فعالیت‌های انضباطی زنده
+              <Badge variant="outline" className="text-xs mr-1 tabular-nums">
+                {behavioral.length.toLocaleString("fa-IR")}
               </Badge>
             </CardTitle>
             <CardDescription>
-              کلاس‌هایی که زنگ آن‌ها شروع شده اما هنوز ثبت نهایی نشده‌اند.
+              امتیازات مثبت و منفی ثبت‌شده توسط معلمان در امروز.
             </CardDescription>
           </CardHeader>
           <CardContent>
-            {loadingPending ? (
-              <div className="flex justify-center py-8">
-                <Loader2 className="h-5 w-5 animate-spin text-navy" />
-              </div>
-            ) : pendingClasses.length === 0 ? (
-              <div className="text-center py-8 text-muted-foreground text-sm">
-                <CheckCircle2 className="h-8 w-8 mx-auto mb-2 text-emerald/40" />
-                هیچ کلاسی در حال برگزاری نیست.
-              </div>
+            {behavioral.length === 0 ? (
+              <EmptyState
+                icon={ThumbsUp}
+                title="هنوز امتیاز انضباطی ثبت نشده است."
+                description="امتیازات مثبت و منفیِ ثبت‌شده توسط معلمان در اینجا نمایش داده می‌شوند."
+              />
             ) : (
-              <div className="space-y-2 max-h-96 overflow-y-auto">
-                {pendingClasses.map((c, i) => (
+              <div className="flex flex-wrap gap-2 max-h-64 overflow-y-auto">
+                {behavioral.map((b, i) => (
                   <div
-                    key={i}
+                    key={b.id}
                     className={cn(
-                      "flex items-center gap-3 p-3 rounded-lg border",
-                      c.minutesSinceStart > 10
-                        ? "border-warning/30 bg-warning/5"
-                        : "border-border"
+                      "stagger-item inline-flex items-center gap-2 p-2 rounded-lg border text-xs",
+                      b.pointType === "POSITIVE"
+                        ? "bg-emerald/5 border-emerald/20 text-emerald"
+                        : "bg-destructive/5 border-destructive/20 text-destructive"
                     )}
+                    style={{ animationDelay: `${i * 30}ms` }}
                   >
-                    <div className="flex-1 min-w-0">
-                      <div className="font-medium text-sm">
-                        {c.classroomName} — {c.subjectTitle}
-                      </div>
-                      <div className="text-xs text-muted-foreground mt-0.5">
-                        {c.teacherName} • {c.bellTitle}
-                      </div>
-                    </div>
-                    <div className="text-left shrink-0">
-                      <div className="text-xs text-muted-foreground">
-                        {hhmmToPersian(c.startTime)}–{hhmmToPersian(c.endTime)}
-                      </div>
-                      <div
-                        className={cn(
-                          "text-xs font-bold",
-                          c.minutesSinceStart > 10
-                            ? "text-warning"
-                            : "text-muted-foreground"
-                        )}
-                      >
-                        {c.minutesSinceStart.toLocaleString("fa-IR")} دقیقه
-                      </div>
-                    </div>
+                    {b.pointType === "POSITIVE" ? (
+                      <ThumbsUp className="h-3 w-3" />
+                    ) : (
+                      <ThumbsDown className="h-3 w-3" />
+                    )}
+                    <span className="font-medium">{b.studentName}</span>
+                    <span className="text-muted-foreground/60">•</span>
+                    <span className="text-muted-foreground">{b.classroomName}</span>
+                    {b.reasonTag && (
+                      <>
+                        <span className="text-muted-foreground/60">•</span>
+                        <span className="italic">{b.reasonTag}</span>
+                      </>
+                    )}
                   </div>
                 ))}
               </div>
             )}
           </CardContent>
         </Card>
-
-        {/* Live Absentees Feed */}
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base text-navy flex items-center gap-2">
-              <AlertCircle className="h-4 w-4" />
-              استریم زنده غایبین
-              <Badge variant="outline" className="text-xs mr-1">
-                {absentees.length}
-              </Badge>
-            </CardTitle>
-            <CardDescription>
-              به محض ثبت توسط معلمان، غایبین و تاخیری‌ها در این لیست ظاهر می‌شوند.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            {absentees.length === 0 ? (
-              <div className="text-center py-8 text-muted-foreground text-sm">
-                <Users className="h-8 w-8 mx-auto mb-2 opacity-30" />
-                هنوز غایبی ثبت نشده است.
-              </div>
-            ) : (
-              <div className="space-y-2 max-h-96 overflow-y-auto">
-                {absentees.map((a) => (
-                  <AbsenteeRow key={a.id} absentee={a} />
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Behavioral Points Feed */}
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base text-navy flex items-center gap-2">
-            <ThumbsUp className="h-4 w-4" />
-            فعالیت‌های انضباطی زنده
-            <Badge variant="outline" className="text-xs mr-1">
-              {behavioral.length}
-            </Badge>
-          </CardTitle>
-          <CardDescription>
-            امتیازات مثبت و منفی ثبت‌شده توسط معلمان در امروز.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {behavioral.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground text-sm">
-              هنوز امتیاز انضباطی ثبت نشده است.
-            </div>
-          ) : (
-            <div className="flex flex-wrap gap-2 max-h-64 overflow-y-auto">
-              {behavioral.map((b) => (
-                <div
-                  key={b.id}
-                  className={cn(
-                    "inline-flex items-center gap-2 p-2 rounded-lg border text-xs",
-                    b.pointType === "POSITIVE"
-                      ? "bg-emerald/5 border-emerald/20 text-emerald"
-                      : "bg-destructive/5 border-destructive/20 text-destructive"
-                  )}
-                >
-                  {b.pointType === "POSITIVE" ? (
-                    <ThumbsUp className="h-3 w-3" />
-                  ) : (
-                    <ThumbsDown className="h-3 w-3" />
-                  )}
-                  <span className="font-medium">{b.studentName}</span>
-                  <span className="text-muted-foreground">•</span>
-                  <span>{b.classroomName}</span>
-                  {b.reasonTag && (
-                    <>
-                      <span className="text-muted-foreground">•</span>
-                      <span className="italic">{b.reasonTag}</span>
-                    </>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+      </ScrollReveal>
     </div>
   );
 }
 
-function StatCard({
-  label,
-  value,
-  icon,
-  tint,
+function AbsenteeRow({
+  absentee,
+  index,
 }: {
-  label: string;
-  value: number;
-  icon: React.ReactNode;
-  tint: string;
+  absentee: AbsenteeEntry;
+  index: number;
 }) {
-  return (
-    <div className={cn("rounded-xl border p-4", tint)}>
-      <div className="flex items-center gap-2 text-xs mb-1">
-        {icon}
-        {label}
-      </div>
-      <div className="text-2xl font-bold">{value.toLocaleString("fa-IR")}</div>
-    </div>
-  );
-}
-
-function AbsenteeRow({ absentee }: { absentee: AbsenteeEntry }) {
   const [drawerOpen, setDrawerOpen] = useState(false);
 
   return (
     <Sheet open={drawerOpen} onOpenChange={setDrawerOpen}>
       <div
         className={cn(
-          "flex items-center gap-3 p-3 rounded-lg border",
+          "stagger-item flex items-center gap-3 p-3 rounded-lg border",
           absentee.status === "ABSENT"
             ? "border-destructive/20 bg-destructive/5"
             : "border-warning/20 bg-warning/5"
         )}
+        style={{ animationDelay: `${index * 30}ms` }}
       >
         <div
           className={cn(
@@ -481,7 +481,9 @@ function AbsenteeRow({ absentee }: { absentee: AbsenteeEntry }) {
           <div className="font-medium text-sm">{absentee.studentName}</div>
           <div className="text-xs text-muted-foreground mt-0.5">
             {absentee.classroomName} • {absentee.subjectTitle} •{" "}
-            {new Date(absentee.submittedAt).toLocaleTimeString("fa-IR")}
+            <span dir="ltr" className="tabular-nums font-mono">
+              {new Date(absentee.submittedAt).toLocaleTimeString("fa-IR")}
+            </span>
           </div>
         </div>
         <Badge
@@ -496,7 +498,12 @@ function AbsenteeRow({ absentee }: { absentee: AbsenteeEntry }) {
           {absentee.status === "ABSENT" ? "غایب" : "تاخیر"}
         </Badge>
         <SheetTrigger asChild>
-          <Button variant="ghost" size="sm" className="text-info hover:text-info">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 text-info hover:text-info hover:bg-info/10 cursor-pointer"
+            aria-label="تماس با ولی"
+          >
             <Phone className="h-3.5 w-3.5" />
           </Button>
         </SheetTrigger>
@@ -526,11 +533,11 @@ function AbsenteeRow({ absentee }: { absentee: AbsenteeEntry }) {
               {absentee.status === "ABSENT" ? "غایب" : "تاخیر"}
             </Badge>
           </div>
-          <Button className="w-full bg-emerald hover:bg-emerald-dark gap-2">
+          <Button className="w-full bg-emerald hover:bg-emerald-dark gap-2 cursor-pointer">
             <Phone className="h-4 w-4" />
             تماس با ولی
           </Button>
-          <Button variant="outline" className="w-full">
+          <Button variant="outline" className="w-full cursor-pointer">
             توجیه غیبت (EXCUSED)
           </Button>
         </div>

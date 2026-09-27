@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, FormEvent } from "react";
+import { useEffect, useMemo, useState, FormEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -20,8 +20,26 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { toast } from "sonner";
-import { Loader2, Plus, BookOpen, Trash2 } from "lucide-react";
+import {
+  Loader2,
+  Plus,
+  BookOpen,
+  Trash2,
+  ChevronUp,
+  ChevronDown,
+  ChevronsUpDown,
+  Info,
+} from "lucide-react";
+import { cn } from "@/lib/utils";
+import { PageHeader } from "@/components/shared/page-header";
+import { EmptyState } from "@/components/shared/empty-state";
 
 interface Subject {
   id: string;
@@ -30,11 +48,16 @@ interface Subject {
   slotCount: number;
 }
 
+type SortKey = "title" | "slotCount" | "createdAt";
+type SortDir = "asc" | "desc";
+
 export function SubjectsManager() {
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [title, setTitle] = useState("");
+  const [sortKey, setSortKey] = useState<SortKey>("title");
+  const [sortDir, setSortDir] = useState<SortDir>("asc");
 
   async function load() {
     setLoading(true);
@@ -75,7 +98,9 @@ export function SubjectsManager() {
 
   async function onDelete(id: string, title: string) {
     if (!confirm(`حذف درس «${title}»؟`)) return;
-    const r = await fetch(`/api/v1/principal/subjects?id=${id}`, { method: "DELETE" });
+    const r = await fetch(`/api/v1/principal/subjects?id=${id}`, {
+      method: "DELETE",
+    });
     const d = await r.json();
     if (!d.ok) {
       toast.error(d.error ?? "حذف ناموفق بود.");
@@ -85,17 +110,49 @@ export function SubjectsManager() {
     load();
   }
 
+  function toggleSort(key: SortKey) {
+    if (sortKey === key) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortKey(key);
+      setSortDir("asc");
+    }
+  }
+
+  const sortedSubjects = useMemo(() => {
+    const arr = [...subjects];
+    arr.sort((a, b) => {
+      let av: string | number;
+      let bv: string | number;
+      switch (sortKey) {
+        case "slotCount":
+          av = a.slotCount;
+          bv = b.slotCount;
+          break;
+        case "createdAt":
+          av = new Date(a.createdAt).getTime();
+          bv = new Date(b.createdAt).getTime();
+          break;
+        case "title":
+        default:
+          av = a.title;
+          bv = b.title;
+          break;
+      }
+      if (av < bv) return sortDir === "asc" ? -1 : 1;
+      if (av > bv) return sortDir === "asc" ? 1 : -1;
+      return 0;
+    });
+    return arr;
+  }, [subjects, sortKey, sortDir]);
+
   return (
     <div className="max-w-6xl mx-auto space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-navy flex items-center gap-2">
-          <BookOpen className="h-6 w-6" />
-          دروس
-        </h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          تعریف دروس قابل ارائه در مدرسه.
-        </p>
-      </div>
+      <PageHeader
+        title="دروس"
+        subtitle="تعریف دروس قابل ارائه در مدرسه."
+        icon={BookOpen}
+      />
 
       <Card>
         <CardHeader>
@@ -103,23 +160,32 @@ export function SubjectsManager() {
             <Plus className="h-4 w-4" />
             درس جدید
           </CardTitle>
+          <CardDescription>
+            عنوان درس را وارد کنید. دروس قابل حذف هستند تا زمانی که در برنامهٔ هفتگی استفاده نشده باشند.
+          </CardDescription>
         </CardHeader>
         <form onSubmit={onSubmit}>
           <CardContent className="space-y-2">
-            <Label htmlFor="title">عنوان درس</Label>
+            <Label htmlFor="title" className="text-xs font-medium">
+              عنوان درس
+            </Label>
             <Input
               id="title"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder="مثلاً ریاضیات گسسته"
               required
+              maxLength={100}
             />
+            <p className="text-xs text-muted-foreground tabular-nums">
+              {title.length.toLocaleString("fa-IR")} / ۱۰۰ نویسه
+            </p>
           </CardContent>
           <CardFooter>
             <Button
               type="submit"
               disabled={submitting || !title}
-              className="bg-emerald hover:bg-emerald-dark"
+              className="bg-emerald hover:bg-emerald-dark cursor-pointer"
             >
               {submitting ? (
                 <>
@@ -137,8 +203,15 @@ export function SubjectsManager() {
       <Card>
         <CardHeader>
           <CardTitle className="text-base text-navy">
-            دروس ثبت‌شده ({subjects.length})
+            دروس ثبت‌شده
+            <span className="text-muted-foreground font-normal mr-2 tabular-nums">
+              ({subjects.length.toLocaleString("fa-IR")})
+            </span>
           </CardTitle>
+          <CardDescription className="flex items-start gap-2">
+            <Info className="h-3.5 w-3.5 mt-0.5 text-info shrink-0" />
+            دروسی که در برنامهٔ هفتگی استفاده شده‌اند قابل حذف نیستند — برای حذف ابتدا سلول‌های مربوطه را از برنامه حذف کنید.
+          </CardDescription>
         </CardHeader>
         <CardContent>
           {loading ? (
@@ -146,45 +219,125 @@ export function SubjectsManager() {
               <Loader2 className="h-6 w-6 animate-spin text-navy" />
             </div>
           ) : subjects.length === 0 ? (
-            <div className="text-center py-10 text-muted-foreground">
-              <BookOpen className="h-10 w-10 mx-auto mb-2 opacity-30" />
-              هنوز درسی ثبت نشده است.
-            </div>
+            <EmptyState
+              icon={BookOpen}
+              title="هنوز درسی ثبت نشده است."
+              description="با تکمیل فرم بالا، اولین درس مدرسه را تعریف کنید."
+            />
           ) : (
-            <div className="rounded-lg border overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>عنوان درس</TableHead>
-                    <TableHead>تعداد استفاده در برنامه</TableHead>
-                    <TableHead className="text-left">عملیات</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {subjects.map((s) => (
-                    <TableRow key={s.id}>
-                      <TableCell className="font-medium">{s.title}</TableCell>
-                      <TableCell>{s.slotCount.toLocaleString("fa-IR")}</TableCell>
-                      <TableCell>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => onDelete(s.id, s.title)}
-                          className="text-destructive hover:text-destructive hover:bg-destructive/10"
-                          disabled={s.slotCount > 0}
-                          title={s.slotCount > 0 ? "این درس در برنامه هفتگی استفاده شده است." : "حذف"}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </TableCell>
+            <div className="rounded-lg border overflow-hidden">
+              <div className="overflow-x-auto max-h-[28rem]">
+                <Table className="sticky-table-header">
+                  <TableHeader>
+                    <TableRow>
+                      <SortableHead
+                        label="عنوان درس"
+                        active={sortKey === "title"}
+                        dir={sortDir}
+                        onClick={() => toggleSort("title")}
+                      />
+                      <SortableHead
+                        label="استفاده در برنامه"
+                        active={sortKey === "slotCount"}
+                        dir={sortDir}
+                        onClick={() => toggleSort("slotCount")}
+                        className="text-left"
+                      />
+                      <SortableHead
+                        label="تاریخ ثبت"
+                        active={sortKey === "createdAt"}
+                        dir={sortDir}
+                        onClick={() => toggleSort("createdAt")}
+                      />
+                      <TableHead className="text-left">عملیات</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                  </TableHeader>
+                  <TableBody>
+                    {sortedSubjects.map((s, i) => (
+                      <TableRow
+                        key={s.id}
+                        className="data-table-row stagger-item"
+                        style={{ animationDelay: `${i * 30}ms` }}
+                      >
+                        <TableCell className="font-medium">{s.title}</TableCell>
+                        <TableCell className="tabular-nums">
+                          {s.slotCount.toLocaleString("fa-IR")}
+                        </TableCell>
+                        <TableCell className="text-xs text-muted-foreground tabular-nums">
+                          {new Date(s.createdAt).toLocaleDateString("fa-IR")}
+                        </TableCell>
+                        <TableCell>
+                          <TooltipProvider delayDuration={150}>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => onDelete(s.id, s.title)}
+                                  disabled={s.slotCount > 0}
+                                  className="text-destructive hover:text-destructive hover:bg-destructive/10 cursor-pointer h-8 w-8 p-0 disabled:opacity-40 disabled:cursor-not-allowed"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent side="top">
+                                {s.slotCount > 0
+                                  ? "این درس در برنامهٔ هفتگی استفاده شده است."
+                                  : "حذف درس"}
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
             </div>
           )}
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+/* ── Sortable Table Header ── */
+function SortableHead({
+  label,
+  active,
+  dir,
+  onClick,
+  className,
+}: {
+  label: string;
+  active: boolean;
+  dir: SortDir;
+  onClick: () => void;
+  className?: string;
+}) {
+  const Icon = !active
+    ? ChevronsUpDown
+    : dir === "asc"
+      ? ChevronUp
+      : ChevronDown;
+  return (
+    <TableHead className={cn("p-0", className)}>
+      <button
+        type="button"
+        onClick={onClick}
+        className={cn(
+          "flex items-center gap-1.5 px-2 h-10 font-medium cursor-pointer hover:text-navy transition-colors w-full",
+          active && "text-navy"
+        )}
+      >
+        <span>{label}</span>
+        <Icon
+          className={cn(
+            "h-3.5 w-3.5 shrink-0",
+            !active && "text-muted-foreground/60"
+          )}
+        />
+      </button>
+    </TableHead>
   );
 }

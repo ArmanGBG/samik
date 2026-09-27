@@ -1,30 +1,13 @@
-import { WelcomeCard } from "@/components/dashboard/welcome-card";
+import { redirect } from "next/navigation";
 
 export const metadata = { title: "داشبورد ناظم | سامیک" };
 
+/**
+ * Deputy landing — redirect to the primary workspace (Live Attendance
+ * dashboard). Per the UI/UX Pro Max redesign brief, the deputy's primary
+ * workspace is the live attendance command-center; the welcome card is
+ * retired in favor of an immediate redirect.
+ */
 export default function DeputyDashboard() {
-  return (
-    <WelcomeCard
-      role="DEPUTY"
-      roleLabel="ناظم / معاون"
-      schoolName="مدرسه شما"
-      features={[
-        {
-          title: "برنامه هفتگی",
-          description: "ساخت و ویرایش تقویم هفتگی با Drag & Drop.",
-          status: "soon",
-        },
-        {
-          title: "مانیتورینگ زنده حضور و غیاب",
-          description: "داشبورد Command Center با اتصال SSE.",
-          status: "soon",
-        },
-        {
-          title: "کارتابل پیامک",
-          description: "تأیید و ارسال گروهی پیامک غیبت به اولیا.",
-          status: "soon",
-        },
-      ]}
-    />
-  );
+  redirect("/deputy/live-attendance");
 }

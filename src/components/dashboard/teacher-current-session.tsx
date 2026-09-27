@@ -6,10 +6,6 @@ import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
@@ -25,7 +21,10 @@ import {
   AlertCircle,
 } from "lucide-react";
 import { dayToPersian } from "@/lib/timetable/days";
-import { hhmmToPersian } from "@/lib/timetable/time-utils";
+import { PageHeader } from "@/components/shared/page-header";
+import { ScrollReveal } from "@/components/shared/scroll-reveal";
+import { EmptyState } from "@/components/shared/empty-state";
+import { cn } from "@/lib/utils";
 
 interface ActiveSession {
   slotId: string;
@@ -121,162 +120,223 @@ export function TeacherCurrentSession() {
   const { server, activeSession, agenda } = data;
   const todayName = dayToPersian(server.todaySamikDay);
 
+  // Build subtitle: today + time + parity badge — compact, inline
+  const subtitle = `${todayName} • ${server.nowHHmmFa}${
+    !server.isUnconfigured && server.parity
+      ? ` • هفته ${server.weekNumber.toLocaleString("fa-IR")} — ${server.parity === "ODD_WEEKS" ? "فرد" : "زوج"}`
+      : ""
+  }`;
+
+  // PageHeader actions: parity badge (when configured) + warning badge (when unconfigured) + refresh button
+  const headerActions = (
+    <div className="flex items-center gap-2 flex-wrap">
+      {!server.isUnconfigured && server.parity && (
+        <Badge
+          variant="outline"
+          className={cn(
+            "tabular-nums text-xs",
+            server.parity === "ODD_WEEKS"
+              ? "bg-info/10 text-info border-info/30"
+              : "bg-warning/10 text-warning border-warning/30"
+          )}
+        >
+          هفته {server.weekNumber.toLocaleString("fa-IR")} — {server.parity === "ODD_WEEKS" ? "فرد" : "زوج"}
+        </Badge>
+      )}
+      {server.isUnconfigured && (
+        <Badge variant="outline" className="bg-warning/10 text-warning border-warning/30 text-xs">
+          <AlertCircle className="h-3 w-3" />
+          سال تحصیلی پیکربندی نشده
+        </Badge>
+      )}
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={() => load(true)}
+        disabled={refreshing}
+        className="h-8 gap-1.5 text-xs"
+      >
+        <RefreshCw className={cn("h-3.5 w-3.5", refreshing && "animate-spin")} />
+        به‌روزرسانی
+      </Button>
+    </div>
+  );
+
   return (
     <div className="max-w-5xl mx-auto space-y-6">
-      {/* Status bar */}
-      <Card>
-        <CardContent className="py-3 flex items-center justify-between flex-wrap gap-3">
-          <div className="flex items-center gap-4 flex-wrap">
-            <div className="flex items-center gap-2">
-              <Calendar className="h-4 w-4 text-muted-foreground" />
-              <span className="text-sm">{todayName}</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <Clock className="h-4 w-4 text-muted-foreground" />
-              <span dir="ltr" className="text-sm font-mono">{server.nowHHmmFa}</span>
-            </div>
-            {!server.isUnconfigured && (
-              <Badge variant="outline" className={
-                server.parity === "ODD_WEEKS" ? "bg-info/10 text-info" : "bg-warning/10 text-warning"
-              }>
-                هفته {server.weekNumber.toLocaleString("fa-IR")} — {server.parity === "ODD_WEEKS" ? "فرد" : "زوج"}
-              </Badge>
-            )}
-            {server.isUnconfigured && (
-              <Badge variant="outline" className="bg-warning/10 text-warning">
-                <AlertCircle className="h-3 w-3 ml-1" />
-                سال تحصیلی پیکربندی نشده
-              </Badge>
-            )}
-          </div>
-          <Button variant="ghost" size="sm" onClick={() => load(true)} disabled={refreshing}>
-            <RefreshCw className={`h-4 w-4 ml-1 ${refreshing ? "animate-spin" : ""}`} />
-            به‌روزرسانی
-          </Button>
-        </CardContent>
-      </Card>
+      <PageHeader
+        title="داشبورد معلم"
+        subtitle={subtitle}
+        icon={GraduationCap}
+        actions={headerActions}
+      />
 
-      {/* Hero Card */}
-      {activeSession ? (
-        <Card className="border-emerald/30 bg-gradient-to-l from-emerald to-emerald-dark text-white shadow-lg">
-          <CardHeader>
-            <div className="flex items-center gap-2 text-emerald-light text-xs font-medium mb-1">
-              <span className="inline-block h-2 w-2 rounded-full bg-white animate-pulse" />
-              کلاس در حال برگزاری
-            </div>
-            <CardTitle className="text-3xl">{activeSession.subjectTitle}</CardTitle>
-            <CardDescription className="text-white/90">
-              {activeSession.bellTitle} — {activeSession.startTimeFa} تا {activeSession.endTimeFa}
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <div className="rounded-lg bg-white/15 p-3">
-                <div className="flex items-center gap-2 text-white/70 text-xs">
-                  <DoorClosed className="h-3 w-3" />
-                  کلاس
+      {/* Hero Card — active session, or EmptyState */}
+      <ScrollReveal>
+        {activeSession ? (
+          <Card className="border-emerald/30 bg-gradient-to-l from-emerald to-emerald-dark text-white shadow-lg shadow-emerald/20 overflow-hidden">
+            <CardContent className="p-5 space-y-4">
+              {/* Top row: live indicator + subject + bell title */}
+              <div className="flex items-start justify-between gap-3 flex-wrap">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 text-emerald-light text-xs font-medium mb-1">
+                    <span className="inline-block h-2 w-2 rounded-full bg-white animate-pulse" />
+                    کلاس در حال برگزاری
+                  </div>
+                  <h2 className="text-2xl font-bold leading-tight truncate">
+                    {activeSession.subjectTitle}
+                  </h2>
+                  <p className="text-white/90 text-sm mt-1">
+                    {activeSession.bellTitle} —{" "}
+                    <span dir="ltr" className="font-mono tabular-nums">
+                      {activeSession.startTimeFa} تا {activeSession.endTimeFa}
+                    </span>
+                  </p>
                 </div>
-                <div className="text-base font-semibold mt-1">
-                  {activeSession.classRoomName}
-                </div>
+                <Button
+                  variant="secondary"
+                  className="bg-white text-emerald hover:bg-white/90 h-10 px-5 shadow-sm"
+                  onClick={() => router.push(`/teacher/attendance/${activeSession.slotId}`)}
+                >
+                  <PlayCircle className="h-4 w-4" />
+                  شروع حضور و غیاب
+                </Button>
               </div>
-              <div className="rounded-lg bg-white/15 p-3">
-                <div className="flex items-center gap-2 text-white/70 text-xs">
-                  <Clock className="h-3 w-3" />
-                  زمان
-                </div>
-                <div dir="ltr" className="text-base font-semibold mt-1 font-mono">
-                  {activeSession.startTimeFa} – {activeSession.endTimeFa}
-                </div>
+
+              {/* Three compact info cards: class + time + week type */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <HeroInfoCard
+                  icon={<DoorClosed className="h-3.5 w-3.5" />}
+                  label="کلاس"
+                  value={activeSession.classRoomName}
+                />
+                <HeroInfoCard
+                  icon={<Clock className="h-3.5 w-3.5" />}
+                  label="زمان"
+                  value={`${activeSession.startTimeFa} – ${activeSession.endTimeFa}`}
+                  ltr
+                />
+                <HeroInfoCard
+                  icon={<Calendar className="h-3.5 w-3.5" />}
+                  label="نوع هفته"
+                  value={WEEK_TYPE_LABEL[activeSession.weekType] ?? activeSession.weekType}
+                />
               </div>
-              <div className="rounded-lg bg-white/15 p-3">
-                <div className="flex items-center gap-2 text-white/70 text-xs">
-                  <Calendar className="h-3 w-3" />
-                  نوع هفته
-                </div>
-                <div className="text-base font-semibold mt-1">
-                  {WEEK_TYPE_LABEL[activeSession.weekType] ?? activeSession.weekType}
-                </div>
-              </div>
-            </div>
-          </CardContent>
-          <CardFooter>
-            <Button
-              variant="secondary"
-              className="bg-white text-emerald hover:bg-white/90"
-              onClick={() => router.push(`/teacher/attendance/${activeSession.slotId}`)}
-            >
-              <PlayCircle className="h-4 w-4 ml-2" />
-              شروع حضور و غیاب
-            </Button>
-          </CardFooter>
-        </Card>
-      ) : (
-        <Card className="border-dashed">
-          <CardHeader>
-            <CardTitle className="text-base text-muted-foreground flex items-center gap-2">
-              <PlayCircle className="h-5 w-5" />
-              کلاس فعالی در این زنگ ندارید
-            </CardTitle>
-            <CardDescription>
-              {agenda.length > 0
-                ? "در ادامه برنامه امروز شما نمایش داده می‌شود."
-                : "هیچ کلاسی برای امروز تعریف نشده است."}
-            </CardDescription>
-          </CardHeader>
-        </Card>
-      )}
+            </CardContent>
+          </Card>
+        ) : (
+          <Card className="border-dashed">
+            <CardContent className="py-0">
+              <EmptyState
+                icon={PlayCircle}
+                title="کلاس فعالی در این زنگ ندارید"
+                description={
+                  agenda.length > 0
+                    ? "در ادامه برنامه امروز شما نمایش داده می‌شود."
+                    : "هیچ کلاسی برای امروز تعریف نشده است."
+                }
+              />
+            </CardContent>
+          </Card>
+        )}
+      </ScrollReveal>
 
       {/* Agenda for today */}
       {agenda.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base text-navy">برنامه امروز شما</CardTitle>
-            <CardDescription>
-              {agenda.length} کلاس — هفته {server.weekNumber > 0 ? server.weekNumber.toLocaleString("fa-IR") : "—"}
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-2">
-              {agenda.map((item, idx) => {
-                const isActive = activeSession?.slotId === item.slotId;
-                return (
-                  <div
-                    key={item.slotId}
-                    className={`flex items-center gap-3 p-3 rounded-lg border ${
-                      isActive ? "border-emerald bg-emerald/5" : "border-border"
-                    }`}
-                  >
-                    <div className="text-xs text-muted-foreground font-mono shrink-0 w-16" dir="ltr">
-                      {item.startTimeFa}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <BookOpen className="h-4 w-4 text-muted-foreground shrink-0" />
-                        <span className="font-medium truncate">
-                          {item.subjectTitle}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5">
-                        <GraduationCap className="h-3 w-3" />
-                        {item.classroomName}
-                        <span>•</span>
-                        {item.bellTitle}
-                      </div>
-                    </div>
-                    <Badge
-                      variant="outline"
-                      className={WEEK_TYPE_TINT[item.weekType] ?? ""}
+        <ScrollReveal delay={60}>
+          <Card>
+            <CardContent className="p-0">
+              <div className="flex items-center justify-between gap-3 px-5 py-3 border-b border-border">
+                <div className="flex items-center gap-2">
+                  <BookOpen className="h-4 w-4 text-navy" />
+                  <span className="font-medium text-sm text-navy">برنامه امروز شما</span>
+                </div>
+                <span className="text-xs text-muted-foreground tabular-nums">
+                  {agenda.length.toLocaleString("fa-IR")} کلاس
+                  {!server.isUnconfigured && (
+                    <>
+                      {" "}• هفته {server.weekNumber > 0 ? server.weekNumber.toLocaleString("fa-IR") : "—"}
+                    </>
+                  )}
+                </span>
+              </div>
+              <div className="divide-y divide-border">
+                {agenda.map((item, idx) => {
+                  const isActive = activeSession?.slotId === item.slotId;
+                  const tint = WEEK_TYPE_TINT[item.weekType];
+                  return (
+                    <div
+                      key={item.slotId}
+                      className={cn(
+                        "stagger-item data-table-row flex items-center gap-3 p-2.5 transition-colors",
+                        isActive ? "bg-emerald/5" : "hover:bg-muted/50"
+                      )}
+                      style={{ animationDelay: `${idx * 30}ms` }}
                     >
-                      {WEEK_TYPE_LABEL[item.weekType] ?? item.weekType}
-                    </Badge>
-                  </div>
-                );
-              })}
-            </div>
-          </CardContent>
-        </Card>
+                      <div
+                        dir="ltr"
+                        className="text-xs text-muted-foreground font-mono tabular-nums shrink-0 w-14 text-center"
+                      >
+                        {item.startTimeFa}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <BookOpen className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                          <span className="font-medium text-sm truncate">
+                            {item.subjectTitle}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5">
+                          <GraduationCap className="h-3 w-3" />
+                          <span className="truncate">{item.classroomName}</span>
+                          <span aria-hidden>•</span>
+                          <span className="truncate">{item.bellTitle}</span>
+                        </div>
+                      </div>
+                      <Badge
+                        variant="outline"
+                        className={cn("text-[10px] shrink-0", tint)}
+                      >
+                        {WEEK_TYPE_LABEL[item.weekType] ?? item.weekType}
+                      </Badge>
+                    </div>
+                  );
+                })}
+              </div>
+            </CardContent>
+          </Card>
+        </ScrollReveal>
       )}
+    </div>
+  );
+}
+
+function HeroInfoCard({
+  icon,
+  label,
+  value,
+  ltr,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+  ltr?: boolean;
+}) {
+  return (
+    <div className="rounded-lg bg-white/15 p-3 backdrop-blur-sm">
+      <div className="flex items-center gap-1.5 text-white/70 text-[11px]">
+        {icon}
+        {label}
+      </div>
+      <div
+        dir={ltr ? "ltr" : undefined}
+        className={cn(
+          "text-base font-semibold mt-1",
+          ltr && "font-mono tabular-nums"
+        )}
+      >
+        {value}
+      </div>
     </div>
   );
 }

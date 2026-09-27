@@ -12,16 +12,29 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { EmptyState } from "@/components/shared/empty-state";
 import { toast } from "sonner";
-import { Loader2, ArrowLeft, School, UserCog, GraduationCap, Users } from "lucide-react";
+import {
+  Loader2,
+  ArrowLeft,
+  School,
+  UserCog,
+  GraduationCap,
+  Users,
+  LogOut,
+  ShieldAlert,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 
-const ROLE_STYLES: Record<string, { icon: any; tint: string }> = {
-  SUPER_ADMIN: { icon: UserCog, tint: "text-purple-600 bg-purple-50" },
-  PRINCIPAL: { icon: School, tint: "text-navy bg-blue-50" },
-  DEPUTY: { icon: Users, tint: "text-emerald bg-emerald-50" },
-  TEACHER: { icon: GraduationCap, tint: "text-info bg-sky-50" },
-  STUDENT: { icon: GraduationCap, tint: "text-warning bg-amber-50" },
+const ROLE_STYLES: Record<
+  string,
+  { icon: any; tint: string; ring: string }
+> = {
+  SUPER_ADMIN: { icon: UserCog, tint: "text-purple-600 bg-purple-50", ring: "hover:border-purple-400" },
+  PRINCIPAL: { icon: School, tint: "text-navy bg-blue-50", ring: "hover:border-navy" },
+  DEPUTY: { icon: Users, tint: "text-emerald bg-emerald-50", ring: "hover:border-emerald" },
+  TEACHER: { icon: GraduationCap, tint: "text-info bg-sky-50", ring: "hover:border-info" },
+  STUDENT: { icon: GraduationCap, tint: "text-warning bg-amber-50", ring: "hover:border-warning" },
 };
 
 export default function SelectProfilePage() {
@@ -97,43 +110,39 @@ export default function SelectProfilePage() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-offwhite via-white to-emerald-50 p-4">
-      <Card className="w-full max-w-2xl shadow-xl">
-        <CardHeader className="space-y-3 text-center">
-          <div className="flex justify-center">
-            <SamikLogo size={48} />
+      <Card className="w-full max-w-2xl shadow-xl border-border/60">
+        <CardHeader className="p-6 pb-2 space-y-3 text-center">
+          <div className="flex justify-center stagger-item" style={{ animationDelay: "0ms" }}>
+            <SamikLogo size={44} />
           </div>
-          <div>
-            <CardTitle className="text-2xl text-navy">
-              انتخاب پروفایل
-            </CardTitle>
-            <CardDescription>
+          <div className="stagger-item" style={{ animationDelay: "30ms" }}>
+            <CardTitle className="text-xl text-navy">انتخاب پروفایل</CardTitle>
+            <CardDescription className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
               {firstName} {lastName} عزیز، خوش آمدید.
               <br />
               لطفاً پروفایل مورد نظر خود را برای ادامه انتخاب کنید.
             </CardDescription>
           </div>
         </CardHeader>
-        <CardContent>
+        <CardContent className="p-6 pt-4">
           {profiles.length === 0 ? (
-            <div className="text-center py-10 space-y-3">
-              <div className="text-5xl">🔒</div>
-              <p className="text-lg font-medium text-foreground">
-                شما هنوز در هیچ مدرسه‌ای ثبت نشده‌اید.
-              </p>
-              <p className="text-sm text-muted-foreground max-w-sm mx-auto">
-                برای دسترسی به سامانه، باید توسط مدیر مدرسه‌ای به پلتفرم دعوت
-                شوید. اگر فکر می‌کنید این خطا است، با پشتیبانی تماس بگیرید.
-              </p>
-              <Button
-                variant="outline"
-                onClick={() => auth.logout()}
-                className="mt-4"
-              >
-                خروج از حساب
-              </Button>
-            </div>
+            <EmptyState
+              icon={ShieldAlert}
+              title="شما هنوز در هیچ مدرسه‌ای ثبت نشده‌اید."
+              description="برای دسترسی به سامانه، باید توسط مدیر مدرسه‌ای به پلتفرم دعوت شوید. اگر فکر می‌کنید این خطا است، با پشتیبانی تماس بگیرید."
+              action={
+                <Button
+                  variant="outline"
+                  onClick={() => auth.logout()}
+                  className="cursor-pointer"
+                >
+                  <LogOut className="ml-2 h-4 w-4" />
+                  خروج از حساب
+                </Button>
+              }
+            />
           ) : (
-            <div className="space-y-3">
+            <div className="space-y-2.5">
               {profiles.map((p, i) => {
                 const style = ROLE_STYLES[p.role] ?? ROLE_STYLES.TEACHER;
                 const Icon = style.icon;
@@ -144,16 +153,17 @@ export default function SelectProfilePage() {
                     key={key + i}
                     onClick={() => selectProfile(p)}
                     disabled={isSelecting}
+                    style={{ animationDelay: `${i * 60}ms` }}
                     className={cn(
-                      "w-full flex items-center gap-4 p-4 rounded-xl border-2 transition-all",
-                      "hover:border-navy hover:bg-navy/5 hover:shadow-md",
-                      "border-border bg-white text-right",
-                      "disabled:opacity-50 disabled:cursor-not-allowed"
+                      "stagger-item kpi-card w-full flex items-center gap-3 p-3 rounded-lg border-2",
+                      "border-border bg-white text-right cursor-pointer",
+                      "hover:shadow-md disabled:cursor-not-allowed disabled:opacity-50",
+                      style.ring
                     )}
                   >
                     <div
                       className={cn(
-                        "h-12 w-12 rounded-full flex items-center justify-center shrink-0",
+                        "h-10 w-10 rounded-lg flex items-center justify-center shrink-0",
                         style.tint
                       )}
                     >
@@ -164,23 +174,24 @@ export default function SelectProfilePage() {
                       )}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="font-semibold text-foreground truncate">
+                      <p className="text-sm font-medium text-foreground truncate">
                         {p.label}
                       </p>
-                      <p className="text-xs text-muted-foreground">
-                        زیردامنه: {p.schoolSubdomain}
+                      <p className="text-[11px] text-muted-foreground tabular-nums" dir="ltr">
+                        {p.schoolSubdomain}.samik.app
                       </p>
                     </div>
-                    <ArrowLeft className="h-5 w-5 text-muted-foreground shrink-0" />
+                    <ArrowLeft className="h-4 w-4 text-muted-foreground shrink-0" />
                   </button>
                 );
               })}
-              <div className="pt-4 border-t border-border">
+              <div className="pt-3 mt-2 border-t border-border">
                 <Button
                   variant="ghost"
                   onClick={() => auth.logout()}
-                  className="w-full"
+                  className="w-full text-muted-foreground hover:text-destructive cursor-pointer"
                 >
+                  <LogOut className="ml-2 h-4 w-4" />
                   خروج از حساب
                 </Button>
               </div>

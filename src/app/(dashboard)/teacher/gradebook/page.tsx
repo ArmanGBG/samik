@@ -2,16 +2,17 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
-  CardHeader,
-  CardTitle,
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { Loader2, BookOpen, ArrowLeft, DoorClosed } from "lucide-react";
+import { PageHeader } from "@/components/shared/page-header";
+import { ScrollReveal } from "@/components/shared/scroll-reveal";
+import { EmptyState } from "@/components/shared/empty-state";
+import { cn } from "@/lib/utils";
 
 interface ClassroomSlot {
   classRoom: { id: string; name: string; gradeLevel: string };
@@ -69,49 +70,70 @@ export default function TeacherGradebookIndexPage() {
     {}
   );
 
+  const classroomList = Object.values(classrooms);
+
   return (
     <div className="max-w-4xl mx-auto space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-navy flex items-center gap-2">
-          <BookOpen className="h-6 w-6" />
-          دفتر نمره
-        </h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          یکی از کلاس‌های خود را برای مشاهده دفتر نمره انتخاب کنید.
-        </p>
-      </div>
+      <PageHeader
+        title="دفتر نمره"
+        subtitle="یکی از کلاس‌های خود را برای مشاهده دفتر نمره انتخاب کنید."
+        icon={BookOpen}
+      />
 
-      {Object.values(classrooms).length === 0 ? (
+      {classroomList.length === 0 ? (
         <Card>
-          <CardContent className="py-12 text-center text-muted-foreground">
-            <DoorClosed className="h-10 w-10 mx-auto mb-2 opacity-30" />
-            هنوز کلاسی به شما اختصاص نیافته است.
+          <CardContent className="py-0">
+            <EmptyState
+              icon={DoorClosed}
+              title="هنوز کلاسی به شما اختصاص نیافته است."
+              description="به‌محض اختصاص کلاس، دفتر نمره آن در اینجا نمایش داده می‌شود."
+            />
           </CardContent>
         </Card>
       ) : (
-        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          {Object.values(classrooms).map(({ info, subjects }) => (
-            <Link key={info.id} href={`/teacher/gradebook/${info.id}`}>
-              <Card className="hover:border-navy hover:shadow-lg transition-all cursor-pointer h-full">
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-base flex items-center justify-between">
-                    <span>{info.gradeLevel} {info.name}</span>
-                    <ArrowLeft className="h-4 w-4 text-muted-foreground" />
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="flex flex-wrap gap-1">
-                    {subjects.map((subj) => (
-                      <Badge key={subj} variant="outline" className="text-xs">
-                        {subj}
-                      </Badge>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-            </Link>
-          ))}
-        </div>
+        <ScrollReveal>
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {classroomList.map(({ info, subjects }, i) => (
+              <Link
+                key={info.id}
+                href={`/teacher/gradebook/${info.id}`}
+                className="block h-full"
+              >
+                <Card
+                  className={cn(
+                    "kpi-card stagger-item h-full hover:border-navy/40 cursor-pointer"
+                  )}
+                  style={{ animationDelay: `${i * 30}ms` }}
+                >
+                  <CardContent className="p-4">
+                    <div className="flex items-start justify-between gap-2 mb-3">
+                      <div className="min-w-0">
+                        <div className="text-xs text-muted-foreground tabular-nums">
+                          {info.gradeLevel}
+                        </div>
+                        <div className="font-semibold text-base text-navy truncate">
+                          {info.name}
+                        </div>
+                      </div>
+                      <ArrowLeft className="h-4 w-4 text-muted-foreground shrink-0" />
+                    </div>
+                    <div className="flex flex-wrap gap-1">
+                      {subjects.map((subj) => (
+                        <Badge
+                          key={subj}
+                          variant="outline"
+                          className="text-[10px] bg-emerald/5 text-emerald border-emerald/20"
+                        >
+                          {subj}
+                        </Badge>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              </Link>
+            ))}
+          </div>
+        </ScrollReveal>
       )}
     </div>
   );
