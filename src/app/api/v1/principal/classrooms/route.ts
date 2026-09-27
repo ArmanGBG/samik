@@ -29,35 +29,47 @@ const UpdateBody = z.object({
  * List all (non-soft-deleted) classrooms in the active school.
  * Accessible to PRINCIPAL (admin) and DEPUTY (needs the list for the
  * timetable builder).
+ *
+ * Every return is NextResponse.json(...) — never return an empty
+ * response or plain text, otherwise the client's safeJsonResponse
+ * parser will fail.
  */
 export async function GET(req: NextRequest) {
   return withTenantContext(req, ["PRINCIPAL", "DEPUTY"], async () => {
-    const rooms = await db.classRoom.findMany({
-      where: {}, // soft-delete extension auto-filters deletedAt: null
-      orderBy: [{ gradeLevel: "asc" }, { name: "asc" }],
-      include: {
-        _count: {
-          select: {
-            enrollments: { where: { status: "ACTIVE" } },
-            timetableSlots: true,
-            assessments: true,
+    try {
+      const rooms = await db.classRoom.findMany({
+        where: {}, // soft-delete extension auto-filters deletedAt: null
+        orderBy: [{ gradeLevel: "asc" }, { name: "asc" }],
+        include: {
+          _count: {
+            select: {
+              enrollments: { where: { status: "ACTIVE" } },
+              timetableSlots: true,
+              assessments: true,
+            },
           },
         },
-      },
-    });
-    return NextResponse.json({
-      ok: true,
-      classrooms: rooms.map((r) => ({
-        id: r.id,
-        gradeLevel: r.gradeLevel,
-        major: r.major,
-        name: r.name,
-        createdAt: r.createdAt,
-        studentCount: r._count.enrollments,
-        slotCount: r._count.timetableSlots,
-        assessmentCount: r._count.assessments,
-      })),
-    });
+      });
+      return NextResponse.json({
+        ok: true,
+        classrooms: rooms.map((r) => ({
+          id: r.id,
+          gradeLevel: r.gradeLevel,
+          major: r.major,
+          name: r.name,
+          createdAt: r.createdAt,
+          studentCount: r._count.enrollments,
+          slotCount: r._count.timetableSlots,
+          assessmentCount: r._count.assessments,
+        })),
+      });
+    } catch (err) {
+      console.error("[classrooms GET] error:", err);
+      return NextResponse.json(
+        { ok: false, error: "خطا در دریافت لیست کلاس‌ها." },
+        { status: 500 }
+      );
+    }
   });
 }
 
@@ -79,28 +91,34 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Check duplicate (gradeLevel + name) within this school
-    // Note: soft-delete extension auto-adds deletedAt: null, so we won't
-    // match tombstones.
-    const existing = await db.classRoom.findFirst({
-      where: { gradeLevel: body.gradeLevel, name: body.name },
-      select: { id: true },
-    });
-    if (existing) {
+    try {
+      // Check duplicate (gradeLevel + name) within this school
+      const existing = await db.classRoom.findFirst({
+        where: { gradeLevel: body.gradeLevel, name: body.name },
+        select: { id: true },
+      });
+      if (existing) {
+        return NextResponse.json(
+          { ok: false, error: "کلاسی با این پایه و نام از قبل وجود دارد." },
+          { status: 409 }
+        );
+      }
+
+      const room = await db.classRoom.create({
+        data: {
+          gradeLevel: body.gradeLevel,
+          name: body.name,
+          major: body.major ?? null,
+        },
+      });
+      return NextResponse.json({ ok: true, classroom: room }, { status: 201 });
+    } catch (err) {
+      console.error("[classrooms POST] error:", err);
       return NextResponse.json(
-        { ok: false, error: "کلاسی با این پایه و نام از قبل وجود دارد." },
-        { status: 409 }
+        { ok: false, error: "خطا در ثبت کلاس." },
+        { status: 500 }
       );
     }
-
-    const room = await db.classRoom.create({
-      data: {
-        gradeLevel: body.gradeLevel,
-        name: body.name,
-        major: body.major ?? null,
-      },
-    });
-    return NextResponse.json({ ok: true, classroom: room }, { status: 201 });
   });
 }
 
@@ -126,11 +144,19 @@ export async function PATCH(req: NextRequest) {
       );
     }
 
-    const updated = await db.classRoom.update({
-      where: { id },
-      data: body,
-    });
-    return NextResponse.json({ ok: true, classroom: updated });
+    try {
+      const updated = await db.classRoom.update({
+        where: { id },
+        data: body,
+      });
+      return NextResponse.json({ ok: true, classroom: updated });
+    } catch (err) {
+      console.error("[classrooms PATCH] error:", err);
+      return NextResponse.json(
+        { ok: false, error: "خطا در ویرایش کلاس." },
+        { status: 500 }
+      );
+    }
   });
 }
 
@@ -146,7 +172,15 @@ export async function DELETE(req: NextRequest) {
     if (!id) {
       return NextResponse.json({ ok: false, error: "پارامتر id الزامی است." }, { status: 400 });
     }
-    await db.classRoom.delete({ where: { id } });
-    return NextResponse.json({ ok: true });
+    try {
+      await db.classRoom.delete({ where: { id } });
+      return NextResponse.json({ ok: true });
+    } catch (err) {
+      console.error("[classrooms DELETE] error:", err);
+      return NextResponse.json(
+        { ok: false, error: "خطا در حذف کلاس." },
+        { status: 500 }
+      );
+    }
   });
 }

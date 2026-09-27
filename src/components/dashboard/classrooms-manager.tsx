@@ -52,6 +52,7 @@ import {
   ChevronsUpDown,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { safeJsonResponse } from "@/lib/safe-fetch";
 import { PageHeader } from "@/components/shared/page-header";
 import { EmptyState } from "@/components/shared/empty-state";
 import {
@@ -107,8 +108,9 @@ export function ClassRoomsManager() {
     setLoading(true);
     try {
       const r = await fetch("/api/v1/principal/classrooms");
-      const d = await r.json();
-      if (d.ok) setRooms(d.classrooms);
+      const d = await safeJsonResponse(r, "خطا در دریافت لیست کلاس‌ها.");
+      if (d.ok) setRooms(d.classrooms as ClassRoom[]);
+      else toast.error(d.error!);
     } finally {
       setLoading(false);
     }
@@ -185,9 +187,9 @@ export function ClassRoomsManager() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-      const d = await r.json();
+      const d = await safeJsonResponse(r, "ثبت کلاس ناموفق بود.");
       if (!d.ok) {
-        toast.error(d.error ?? "ثبت کلاس ناموفق بود.");
+        toast.error(d.error!);
         return;
       }
       const majorLabel = form.major ? ` (${getMajorShort(form.major)})` : "";
@@ -233,9 +235,9 @@ export function ClassRoomsManager() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-      const d = await r.json();
+      const d = await safeJsonResponse(r, "ویرایش ناموفق بود.");
       if (!d.ok) {
-        toast.error(d.error ?? "ویرایش ناموفق بود.");
+        toast.error(d.error!);
         return;
       }
       toast.success("کلاس ویرایش شد.");
@@ -252,9 +254,9 @@ export function ClassRoomsManager() {
     const r = await fetch(`/api/v1/principal/classrooms?id=${id}`, {
       method: "DELETE",
     });
-    const d = await r.json();
+    const d = await safeJsonResponse(r, "حذف ناموفق بود.");
     if (!d.ok) {
-      toast.error(d.error ?? "حذف ناموفق بود.");
+      toast.error(d.error!);
       return;
     }
     toast.success("کلاس حذف شد.");
