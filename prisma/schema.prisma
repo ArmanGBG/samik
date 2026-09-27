@@ -1,8 +1,11 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+// prisma/schema.prisma — Samik v0.1.0
+// Engine: SQLite (dev)  |  PostgreSQL-compatible (prod)
+//
+// Implements the 9-block ERD from "Architecture Document — Section 9".
+// Golden Rule: every table EXCEPT Users carries school_id (multi-tenant isolation).
+// All PKs are UUID v4. Soft delete via deletedAt: DateTime?.
+// Foreign keys: ON DELETE CASCADE only for absolute dependencies (ClassSession → AttendanceRecord);
+// ON DELETE RESTRICT for Users to prevent orphaning academic records.
 
 generator client {
   provider = "prisma-client-js"
@@ -13,20 +16,358 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model User {
-  id        String   @id @default(cuid())
-  email     String   @unique
-  name      String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+// ============================================================
+//  ENUMS  (SQLite stores them as TEXT, PostgreSQL uses native enums)
+// ============================================================
+
+enum SchoolStatus {
+  ACTIVE
+  SUSPENDED
 }
 
-model Post {
-  id        String   @id @default(cuid())
-  title     String
-  content   String?
-  published Boolean  @default(false)
-  authorId  String
+enum StaffRole {
+  PRINCIPAL
+  DEPUTY
+  TEACHER
+}
+
+enum EnrollmentStatus {
+  ACTIVE
+  ARCHIVED
+  PENDING_CONFIRMATION
+}
+
+enum WeekType {
+  ALL_WEEKS
+  ODD_WEEKS
+  EVEN_WEEKS
+}
+
+enum ClassSessionStatus {
+  PENDING
+  SUBMITTED
+}
+
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+  LATE
+  EXCUSED
+}
+
+enum EvaluationType {
+  NUMERIC
+  DESCRIPTIVE
+}
+
+enum DescriptiveScore {
+  EXCELLENT
+  GOOD
+  ACCEPTABLE
+  NEEDS_IMPROVEMENT
+}
+
+enum PointType {
+  POSITIVE
+  NEGATIVE
+}
+
+enum EventType {
+  ABSENCE
+  DISCIPLINE
+  GRADE
+}
+
+enum NotificationStatus {
+  DRAFT
+  SENT
+  FAILED
+  DISCARDED
+}
+
+enum SendAlertsTo {
+  GUARDIAN_1
+  GUARDIAN_2
+  BOTH
+}
+
+// ============================================================
+//  BLOK 1 — Global Identity & Tenants
+// ============================================================
+
+/// جدول سراسری کاربران — هیچ وابستگی به مدرسه ندارد.
+/// کد ملی و شماره موبایل به‌عنوان کلیدهای تجاری UNIQUE هستند.
+/// PK از نوع UUID (مطابق بخش ۳ سند — جلوگیری از IDOR).
+model User {
+  id           String   @id @default(uuid())
+  nationalCode String   @unique
+  phoneNumber  String   @unique
+  firstName    String
+  lastName     String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  staffEmployments      StaffEmployment[]
+  studentEnrollments    SchoolEnrollment[]
+  taughtTimetableSlots  TimetableSlot[]      @relation("TeacherSlots")
+  assessments           Assessment[]
+  attendanceRecords     AttendanceRecord[]
+  grades                Grade[]
+  behavioralPointsGiven BehavioralPoint[]   @relation("PointsByTeacher")
+  behavioralPointsFor   BehavioralPoint[]   @relation("PointsForStudent")
+  notifications         NotificationOutbox[]
+}
+
+model School {
+  id         String       @id @default(uuid())
+  name       String
+  subdomain  String       @unique
+  smsBalance Int          @default(0)
+  status     SchoolStatus @default(ACTIVE)
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+
+  classrooms        ClassRoom[]
+  staffEmployments  StaffEmployment[]
+  enrollments       SchoolEnrollment[]
+  bellSchedules     BellSchedule[]
+  subjects          Subject[]
+  timetableSlots    TimetableSlot[]
+  classSessions     ClassSession[]
+  assessments       Assessment[]
+  attendanceRecords AttendanceRecord[]
+  grades            Grade[]
+  behavioralPoints  BehavioralPoint[]
+  notifications     NotificationOutbox[]
+}
+
+// ============================================================
+//  BLOK 2 — Academic Structure & Enrollments
+// ============================================================
+
+model ClassRoom {
+  id         String    @id @default(uuid())
+  schoolId   String
+  gradeLevel String
+  name       String
+  deletedAt  DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  school         School             @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  enrollments    SchoolEnrollment[]
+  timetableSlots TimetableSlot[]
+  assessments    Assessment[]
+
+  @@index([schoolId, gradeLevel, name])
+}
+
+model StaffEmployment {
+  id       String    @id @default(uuid())
+  schoolId String
+  userId   String
+  role     StaffRole
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  school School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@unique([schoolId, userId])
+  @@index([userId])
+}
+
+model SchoolEnrollment {
+  id              String            @id @default(uuid())
+  schoolId        String
+  studentUserId   String
+  classRoomId     String
+  academicYear    String
+  guardianPhone1  String
+  guardianPhone2  String?
+  sendAlertsTo    SendAlertsTo      @default(GUARDIAN_1)
+  status          EnrollmentStatus  @default(PENDING_CONFIRMATION)
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  school    School    @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  student   User      @relation(fields: [studentUserId], references: [id], onDelete: Restrict)
+  classRoom ClassRoom @relation(fields: [classRoomId], references: [id], onDelete: Restrict)
+
+  @@index([schoolId, academicYear, status])
+  @@index([studentUserId])
+}
+
+// ============================================================
+//  BLOK 3 — Scheduling & Timetable
+// ============================================================
+
+model BellSchedule {
+  id        String   @id @default(uuid())
+  schoolId  String
+  title     String
+  startTime String   // "07:30" — SQLite has no native Time type; PostgreSQL will use @db.Time
+  endTime   String   // "09:00"
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  school         School          @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  timetableSlots TimetableSlot[]
+
+  @@index([schoolId])
+}
+
+model Subject {
+  id        String   @id @default(uuid())
+  schoolId  String
+  title     String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  school         School          @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  timetableSlots TimetableSlot[]
+
+  @@index([schoolId])
+}
+
+model TimetableSlot {
+  id             String   @id @default(uuid())
+  schoolId       String
+  classRoomId    String
+  subjectId      String
+  teacherUserId  String
+  bellScheduleId String
+  dayOfWeek      Int
+  weekType       WeekType @default(ALL_WEEKS)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  school       School       @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  classRoom    ClassRoom    @relation(fields: [classRoomId], references: [id], onDelete: Restrict)
+  subject      Subject      @relation(fields: [subjectId], references: [id], onDelete: Restrict)
+  teacher      User         @relation("TeacherSlots", fields: [teacherUserId], references: [id], onDelete: Restrict)
+  bellSchedule BellSchedule @relation(fields: [bellScheduleId], references: [id], onDelete: Restrict)
+  classSessions ClassSession[]
+
+  // Composite Index — Developer Directive end of Section 9
+  @@index([teacherUserId, dayOfWeek, weekType])
+  @@index([schoolId, classRoomId])
+}
+
+// ============================================================
+//  BLOK 4 — Daily Operations (Attendance & Grading)
+// ============================================================
+
+model ClassSession {
+  id              String             @id @default(uuid())
+  schoolId        String
+  timetableSlotId String
+  date            DateTime
+  status          ClassSessionStatus @default(PENDING)
+  submittedAt     DateTime?
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+
+  school            School             @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  timetableSlot     TimetableSlot      @relation(fields: [timetableSlotId], references: [id], onDelete: Cascade)
+  attendanceRecords AttendanceRecord[]
+  behavioralPoints  BehavioralPoint[]
+
+  @@unique([timetableSlotId, date])
+  @@index([schoolId, date, status])
+}
+
+model AttendanceRecord {
+  id              String           @id @default(uuid())
+  schoolId        String
+  classSessionId  String
+  studentUserId   String
+  status          AttendanceStatus
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  school       School        @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  classSession ClassSession  @relation(fields: [classSessionId], references: [id], onDelete: Cascade)
+  student      User          @relation(fields: [studentUserId], references: [id], onDelete: Restrict)
+
+  @@unique([classSessionId, studentUserId])
+  @@index([schoolId, studentUserId, status])
+}
+
+model Assessment {
+  id              String         @id @default(uuid())
+  schoolId        String
+  classRoomId     String
+  teacherUserId   String
+  title           String
+  evaluationType  EvaluationType
+  date            DateTime
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  school     School     @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  classRoom  ClassRoom  @relation(fields: [classRoomId], references: [id], onDelete: Restrict)
+  teacher    User       @relation(fields: [teacherUserId], references: [id], onDelete: Restrict)
+  grades     Grade[]
+
+  @@index([schoolId, classRoomId, date])
+}
+
+model Grade {
+  id               String            @id @default(uuid())
+  schoolId         String
+  assessmentId     String
+  studentUserId    String
+  numericScore     Float?
+  descriptiveScore DescriptiveScore?
+  isAbsent         Boolean           @default(false)
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  school     School     @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  assessment Assessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  student    User       @relation(fields: [studentUserId], references: [id], onDelete: Restrict)
+
+  @@unique([assessmentId, studentUserId])
+  @@index([schoolId, studentUserId])
+}
+
+model BehavioralPoint {
+  id             String    @id @default(uuid())
+  schoolId       String
+  studentUserId  String
+  teacherUserId  String
+  classSessionId String?
+  pointType      PointType
+  reasonTag      String?
+  createdAt      DateTime  @default(now())
+
+  school       School        @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  student      User          @relation("PointsForStudent", fields: [studentUserId], references: [id], onDelete: Restrict)
+  teacher      User          @relation("PointsByTeacher", fields: [teacherUserId], references: [id], onDelete: Restrict)
+  classSession ClassSession? @relation(fields: [classSessionId], references: [id], onDelete: SetNull)
+
+  @@index([schoolId, studentUserId, createdAt])
+}
+
+// ============================================================
+//  BLOK 5 — Communications (Approval-Based Outbox)
+// ============================================================
+
+model NotificationOutbox {
+  id              String             @id @default(uuid())
+  schoolId        String
+  studentUserId   String
+  recipientPhone  String
+  eventType       EventType
+  messageBody     String
+  status          NotificationStatus @default(DRAFT)
+  sentAt          DateTime?
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+
+  school  School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  student User   @relation(fields: [studentUserId], references: [id], onDelete: Restrict)
+
+  @@index([schoolId, status, createdAt])
 }
