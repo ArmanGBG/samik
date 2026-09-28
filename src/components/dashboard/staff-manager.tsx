@@ -116,6 +116,8 @@ export function StaffManager() {
       const d = await safeJsonResponse(r, "خطا در دریافت لیست پرسنل.");
       if (d.ok) setStaff(d.staff as StaffMember[]);
       else toast.error(d.error!);
+    } catch {
+      toast.error("خطا در برقراری ارتباط با سرور.");
     } finally {
       setLoading(false);
     }
@@ -180,6 +182,8 @@ export function StaffManager() {
       );
       setForm({ phone: "", nationalCode: "", firstName: "", lastName: "", role: "TEACHER" });
       load();
+    } catch {
+      toast.error("خطا در برقراری ارتباط با سرور.");
     } finally {
       setSubmitting(false);
     }
@@ -214,6 +218,8 @@ export function StaffManager() {
       toast.success("اطلاعات پرسنل ویرایش شد.");
       setEditing(null);
       load();
+    } catch {
+      toast.error("خطا در برقراری ارتباط با سرور.");
     } finally {
       setEditSubmitting(false);
     }
@@ -221,14 +227,18 @@ export function StaffManager() {
 
   async function onDelete(id: string, name: string) {
     if (!confirm(`حذف ${name} از پرسنل این مدرسه؟`)) return;
-    const r = await fetch(`/api/v1/principal/staff?id=${id}`, { method: "DELETE" });
-    const d = await safeJsonResponse(r, "حذف ناموفق بود.");
-    if (!d.ok) {
-      toast.error(d.error!);
-      return;
+    try {
+      const r = await fetch(`/api/v1/principal/staff?id=${id}`, { method: "DELETE" });
+      const d = await safeJsonResponse(r, "حذف ناموفق بود.");
+      if (!d.ok) {
+        toast.error(d.error!);
+        return;
+      }
+      toast.success("پرسنل حذف شد.");
+      load();
+    } catch {
+      toast.error("خطا در برقراری ارتباط با سرور.");
     }
-    toast.success("پرسنل حذف شد.");
-    load();
   }
 
   const stats = useMemo(
@@ -342,14 +352,19 @@ export function StaffManager() {
                 <Button
                   type="submit"
                   disabled={submitting || !form.phone || !form.firstName || !form.lastName}
-                  className="w-full bg-emerald hover:bg-emerald-dark h-9 gap-2"
+                  className="w-full bg-emerald hover:bg-emerald-dark h-9 gap-2 cursor-pointer font-medium"
                 >
                   {submitting ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      در حال افزودن پرسنل...
+                    </>
                   ) : (
-                    <Plus className="h-4 w-4" />
+                    <>
+                      <Plus className="h-4 w-4" />
+                      ثبت و افزودن پرسنل جدید
+                    </>
                   )}
-                  افزودن پرسنل
                 </Button>
               </div>
             </div>
@@ -452,12 +467,13 @@ export function StaffManager() {
                                       variant="ghost"
                                       size="sm"
                                       onClick={() => openEdit(s)}
-                                      className="text-info hover:text-info hover:bg-info/10 h-8 w-8 p-0"
+                                      className="text-info hover:text-info hover:bg-info/10 h-8 w-8 p-0 cursor-pointer"
+                                      aria-label={`ویرایش مشخصات ${s.fullName}`}
                                     >
                                       <Pencil className="h-4 w-4" />
                                     </Button>
                                   </TooltipTrigger>
-                                  <TooltipContent>ویرایش</TooltipContent>
+                                  <TooltipContent>ویرایش مشخصات پرسنل</TooltipContent>
                                 </Tooltip>
                               </TooltipProvider>
                             )}
@@ -469,12 +485,13 @@ export function StaffManager() {
                                       variant="ghost"
                                       size="sm"
                                       onClick={() => onDelete(s.id, s.fullName)}
-                                      className="text-destructive hover:text-destructive hover:bg-destructive/10 h-8 w-8 p-0"
+                                      className="text-destructive hover:text-destructive hover:bg-destructive/10 h-8 w-8 p-0 cursor-pointer"
+                                      aria-label={`حذف ${s.fullName} از پرسنل مدرسه`}
                                     >
                                       <Trash2 className="h-4 w-4" />
                                     </Button>
                                   </TooltipTrigger>
-                                  <TooltipContent>حذف از پرسنل</TooltipContent>
+                                  <TooltipContent>حذف از پرسنل مدرسه</TooltipContent>
                                 </Tooltip>
                               </TooltipProvider>
                             ) : (
@@ -496,7 +513,7 @@ export function StaffManager() {
       <Dialog open={!!editing} onOpenChange={(o) => !o && setEditing(null)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle className="text-navy">ویرایش پرسنل</DialogTitle>
+            <DialogTitle className="text-navy">ویرایش اطلاعات پرسنل</DialogTitle>
           </DialogHeader>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 py-2">
             <div className="space-y-1.5">
@@ -538,7 +555,7 @@ export function StaffManager() {
               />
             </div>
             <div className="space-y-1.5 sm:col-span-2">
-              <Label className="text-xs font-medium">نقش</Label>
+              <Label className="text-xs font-medium">نقش سازمانی</Label>
               <Select
                 value={editForm.role}
                 onValueChange={(v) => setEditForm({ ...editForm, role: v as "DEPUTY" | "TEACHER" })}
@@ -554,15 +571,23 @@ export function StaffManager() {
               </Select>
             </div>
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setEditing(null)}>انصراف</Button>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setEditing(null)} className="cursor-pointer">
+              انصراف و بستن
+            </Button>
             <Button
               onClick={saveEdit}
               disabled={editSubmitting || !editForm.firstName || !editForm.lastName}
-              className="bg-emerald hover:bg-emerald-dark gap-2"
+              className="bg-emerald hover:bg-emerald-dark gap-2 cursor-pointer"
             >
-              {editSubmitting && <Loader2 className="h-4 w-4 animate-spin" />}
-              ذخیره
+              {editSubmitting ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  در حال ذخیره...
+                </>
+              ) : (
+                "ذخیره تغییرات پرسنل"
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>

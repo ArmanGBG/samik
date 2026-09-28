@@ -56,10 +56,10 @@ export function CTASection() {
               <Button
                 size="lg"
                 asChild
-                className="bg-emerald hover:bg-emerald-dark text-white h-12 px-7 text-base gap-2 shadow-xl shadow-emerald/20"
+                className="bg-emerald hover:bg-emerald-dark text-white h-12 px-7 text-base font-semibold gap-2 shadow-xl shadow-emerald/20 cursor-pointer"
               >
                 <Link href="/login">
-                  ورود به سیستم
+                  ورود به سامانه سامیک
                   <ArrowLeft className="h-4 w-4" />
                 </Link>
               </Button>
@@ -67,9 +67,9 @@ export function CTASection() {
                 size="lg"
                 variant="outline"
                 asChild
-                className="h-12 px-7 text-base border-white/30 bg-white/5 text-white hover:bg-white/10 hover:border-white/50"
+                className="h-12 px-7 text-base border-white/30 bg-white/5 text-white hover:bg-white/10 hover:border-white/50 cursor-pointer font-medium"
               >
-                <a href="mailto:hello@samik.app">درخواست دمو</a>
+                <a href="mailto:hello@samik.app">درخواست دمو و مشاوره</a>
               </Button>
             </div>
           </div>

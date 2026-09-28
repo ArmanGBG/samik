@@ -90,7 +90,7 @@ export function Navbar({ initialIsAuthenticated }: NavbarProps) {
               variant="ghost"
               size="sm"
               asChild
-              className="text-foreground/70 hover:text-navy"
+              className="text-foreground/70 hover:text-navy cursor-pointer"
             >
               <a href="#contact">درخواست دمو</a>
             </Button>
@@ -98,7 +98,7 @@ export function Navbar({ initialIsAuthenticated }: NavbarProps) {
               size="sm"
               onClick={handlePrimaryCta}
               className={cn(
-                "gap-2",
+                "gap-2 cursor-pointer font-medium",
                 isAuthed
                   ? "bg-emerald hover:bg-emerald-dark"
                   : "bg-navy hover:bg-navy-dark"
@@ -107,12 +107,12 @@ export function Navbar({ initialIsAuthenticated }: NavbarProps) {
               {isAuthed ? (
                 <>
                   <LayoutDashboard className="h-4 w-4" />
-                  داشبورد من
+                  ورود به داشبورد من
                 </>
               ) : (
                 <>
                   <LogIn className="h-4 w-4" />
-                  ورود به سیستم
+                  ورود به سامانه
                 </>
               )}
             </Button>
@@ -120,9 +120,9 @@ export function Navbar({ initialIsAuthenticated }: NavbarProps) {
 
           {/* Mobile toggle */}
           <button
-            className="md:hidden p-2 -mr-2 text-foreground"
+            className="md:hidden p-2 -mr-2 text-foreground cursor-pointer"
             onClick={() => setMobileOpen((v) => !v)}
-            aria-label="منو"
+            aria-label="باز کردن یا بستن منوی ناوبری"
           >
             {mobileOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
           </button>
@@ -144,9 +144,9 @@ export function Navbar({ initialIsAuthenticated }: NavbarProps) {
               </a>
             ))}
             <div className="border-t border-border mt-2 pt-3 flex flex-col gap-2">
-              <Button variant="outline" asChild className="w-full">
+              <Button variant="outline" asChild className="w-full cursor-pointer">
                 <a href="#contact" onClick={() => setMobileOpen(false)}>
-                  درخواست دمو
+                  درخواست دمو و مشاوره
                 </a>
               </Button>
               <Button
@@ -155,7 +155,7 @@ export function Navbar({ initialIsAuthenticated }: NavbarProps) {
                   handlePrimaryCta();
                 }}
                 className={cn(
-                  "w-full gap-2",
+                  "w-full gap-2 cursor-pointer font-medium",
                   isAuthed
                     ? "bg-emerald hover:bg-emerald-dark"
                     : "bg-navy hover:bg-navy-dark"
@@ -164,12 +164,12 @@ export function Navbar({ initialIsAuthenticated }: NavbarProps) {
                 {isAuthed ? (
                   <>
                     <LayoutDashboard className="h-4 w-4" />
-                    داشبورد من
+                    ورود به داشبورد من
                   </>
                 ) : (
                   <>
                     <LogIn className="h-4 w-4" />
-                    ورود به سیستم
+                    ورود به سامانه
                   </>
                 )}
               </Button>

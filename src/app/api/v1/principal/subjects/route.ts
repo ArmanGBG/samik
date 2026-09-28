@@ -31,13 +31,13 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  return withTenantContext(req, ["PRINCIPAL", "DEPUTY"], async () => {
+  return withTenantContext(req, ["PRINCIPAL", "DEPUTY"], async (ctx) => {
     let body: z.infer<typeof CreateBody>;
     try {
       body = CreateBody.parse(await req.json());
-    } catch (e) {
+    } catch (e: any) {
       return NextResponse.json(
-        { ok: false, error: (e as z.ZodError).errors?.[0]?.message ?? "ورودی نامعتبر" },
+        { ok: false, error: e?.issues?.[0]?.message ?? e?.errors?.[0]?.message ?? "ورودی نامعتبر" },
         { status: 400 }
       );
     }
@@ -51,7 +51,9 @@ export async function POST(req: NextRequest) {
         { status: 409 }
       );
     }
-    const subject = await db.subject.create({ data: { title: body.title } });
+    const subject = await db.subject.create({
+      data: { title: body.title, schoolId: ctx.schoolId } as any,
+    });
     return NextResponse.json({ ok: true, subject }, { status: 201 });
   });
 }
@@ -59,8 +61,8 @@ export async function POST(req: NextRequest) {
 export async function DELETE(req: NextRequest) {
   return withTenantContext(req, ["PRINCIPAL", "DEPUTY"], async () => {
     const id = req.nextUrl.searchParams.get("id");
-    if (!id) {
-      return NextResponse.json({ ok: false, error: "پارامتر id الزامی است." }, { status: 400 });
+    if (!id || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id)) {
+      return NextResponse.json({ ok: false, error: "شناسه درس نامعتبر است." }, { status: 400 });
     }
     // Hard delete (subjects are leaf nodes; cascade-safe per schema)
     await db.subject.delete({ where: { id } });

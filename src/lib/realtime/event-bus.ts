@@ -43,6 +43,7 @@ export interface AttendanceSubmittedEvent {
     absentees: Array<{
       studentId: string;
       studentName: string;
+      guardianPhone?: string;
       status: "ABSENT" | "LATE";
     }>;
   };
@@ -73,66 +74,135 @@ export interface NotificationSentEvent {
   };
 }
 
+export interface AttendanceExcusedEvent {
+  type: "attendance:excused";
+  schoolId: string;
+  payload: {
+    studentId: string;
+    recordId: string;
+    classSessionId?: string;
+  };
+}
+
+export interface GradeSavedEvent {
+  type: "grade:saved";
+  schoolId: string;
+  payload: {
+    studentUserId: string;
+    assessmentId: string;
+    numericScore: number | null;
+    descriptiveScore: string | null;
+    isAbsent: boolean;
+  };
+}
+
+export interface NotificationUpdatedEvent {
+  type: "notification:updated";
+  schoolId: string;
+  payload: {
+    action: "DRAFT_CREATED" | "DISCARDED" | "SENT" | "BULK_SENT";
+    count?: number;
+  };
+}
+
 export type SamikEvent =
   | AttendanceSubmittedEvent
+  | AttendanceExcusedEvent
   | BehavioralPointCreatedEvent
-  | NotificationSentEvent;
+  | GradeSavedEvent
+  | NotificationSentEvent
+  | NotificationUpdatedEvent;
 
 const _g = globalThis as unknown as { __samikEventBus?: EventEmitter };
 if (!_g.__samikEventBus) {
   _g.__samikEventBus = new EventEmitter();
   // Raise the listener cap — we may have many concurrent SSE connections
-  // in dev (one per open deputy dashboard tab).
-  _g.__samikEventBus.setMaxListeners(100);
+  // in dev (one per open tab across all panels).
+  _g.__samikEventBus.setMaxListeners(200);
 }
 export const eventBus: EventEmitter = _g.__samikEventBus!;
 
 /**
  * Emit an attendance-submitted event. Called by POST /api/v1/attendance/sessions
- * after a successful commit. The SSE endpoint listens and pushes to deputies.
+ * after a successful commit.
  */
-export function emitAttendanceSubmitted(payload: AttendanceSubmittedEvent["payload"]) {
+export function emitAttendanceSubmitted(data: AttendanceSubmittedEvent["payload"] & { schoolId: string }) {
+  const { schoolId, ...payload } = data;
   const event: AttendanceSubmittedEvent = {
     type: "attendance:submitted",
-    schoolId: payload.schoolId,
+    schoolId,
     payload,
   };
-  eventBus.emit(`attendance:submitted:${payload.schoolId}`, event);
+  eventBus.emit(`event:${schoolId}`, event);
+}
+
+/**
+ * Emit an attendance-excused event. Called by POST /api/v1/deputy/attendance/excuse.
+ */
+export function emitAttendanceExcused(data: AttendanceExcusedEvent["payload"] & { schoolId: string }) {
+  const { schoolId, ...payload } = data;
+  const event: AttendanceExcusedEvent = {
+    type: "attendance:excused",
+    schoolId,
+    payload,
+  };
+  eventBus.emit(`event:${schoolId}`, event);
 }
 
 /**
  * Emit a behavioral-point-created event. Called by POST /api/v1/behavioral-points.
  */
-export function emitBehavioralPointCreated(payload: BehavioralPointCreatedEvent["payload"]) {
+export function emitBehavioralPointCreated(data: BehavioralPointCreatedEvent["payload"] & { schoolId: string }) {
+  const { schoolId, ...payload } = data;
   const event: BehavioralPointCreatedEvent = {
     type: "behavioral-point:created",
-    schoolId: payload.schoolId,
+    schoolId,
     payload,
   };
-  eventBus.emit(`behavioral-point:created:${payload.schoolId}`, event);
+  eventBus.emit(`event:${schoolId}`, event);
+}
+
+/**
+ * Emit a grade-saved event. Called by POST /api/v1/grades.
+ */
+export function emitGradeSaved(data: GradeSavedEvent["payload"] & { schoolId: string }) {
+  const { schoolId, ...payload } = data;
+  const event: GradeSavedEvent = {
+    type: "grade:saved",
+    schoolId,
+    payload,
+  };
+  eventBus.emit(`event:${schoolId}`, event);
+}
+
+/**
+ * Emit a notification-updated event. Called on SMS draft/send actions.
+ */
+export function emitNotificationUpdated(data: NotificationUpdatedEvent["payload"] & { schoolId: string }) {
+  const { schoolId, ...payload } = data;
+  const event: NotificationUpdatedEvent = {
+    type: "notification:updated",
+    schoolId,
+    payload,
+  };
+  eventBus.emit(`event:${schoolId}`, event);
 }
 
 /**
  * Subscribe to all events for a given school. Returns an unsubscribe function.
  *
- * Used by the SSE endpoint to filter events by the deputy's active school.
+ * Used by the SSE endpoint to filter events by the user's active school.
  */
 export function subscribeToSchool(
   schoolId: string,
   listener: (event: SamikEvent) => void
 ): () => void {
-  const attendanceEvent = `attendance:submitted:${schoolId}`;
-  const behavioralEvent = `behavioral-point:created:${schoolId}`;
-  const notificationEvent = `notification:sent:${schoolId}`;
-
+  const channel = `event:${schoolId}`;
   const wrapped = (event: SamikEvent) => listener(event);
-  eventBus.on(attendanceEvent, wrapped);
-  eventBus.on(behavioralEvent, wrapped);
-  eventBus.on(notificationEvent, wrapped);
+
+  eventBus.on(channel, wrapped);
 
   return () => {
-    eventBus.off(attendanceEvent, wrapped);
-    eventBus.off(behavioralEvent, wrapped);
-    eventBus.off(notificationEvent, wrapped);
+    eventBus.off(channel, wrapped);
   };
 }

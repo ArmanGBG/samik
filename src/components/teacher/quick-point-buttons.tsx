@@ -132,11 +132,12 @@ export function QuickPointButtons({
             onPointerUp={() => endPress("POSITIVE")}
             onPointerLeave={cancelPress}
             className={cn(
-              "rounded-full flex items-center justify-center font-bold transition-all",
+              "rounded-full flex items-center justify-center font-bold transition-all cursor-pointer active:scale-90",
               "bg-emerald/10 text-emerald hover:bg-emerald hover:text-white",
               "disabled:opacity-50 disabled:cursor-not-allowed",
               isSm ? "h-7 w-7" : "h-9 w-9"
             )}
+            aria-label={`ثبت امتیاز مثبت برای ${studentName}`}
             title="امتیاز مثبت (نگه دارید برای انتخاب علت)"
           >
             {loading === "POSITIVE" ? (
@@ -149,10 +150,10 @@ export function QuickPointButtons({
         {tagMenuOpen === "POSITIVE" && (
           <PopoverContent className="w-64" align="start">
             <div className="space-y-2">
-              <p className="text-xs font-semibold text-emerald">امتیاز مثبت برای {studentName}</p>
+              <p className="text-xs font-semibold text-emerald">ثبت امتیاز مثبت برای {studentName}</p>
               <Input
                 autoFocus
-                placeholder="علت (اختیاری)..."
+                placeholder="علت تشویق (اختیاری)..."
                 value={tagInput}
                 onChange={(e) => setTagInput(e.target.value)}
                 onKeyDown={(e) => {
@@ -164,7 +165,7 @@ export function QuickPointButtons({
                   <button
                     key={t}
                     onClick={() => submit("POSITIVE", t)}
-                    className="text-[10px] px-2 py-0.5 rounded-full bg-emerald/10 text-emerald hover:bg-emerald hover:text-white transition"
+                    className="text-[10px] px-2 py-0.5 rounded-full bg-emerald/10 text-emerald hover:bg-emerald hover:text-white transition cursor-pointer"
                   >
                     {t}
                   </button>
@@ -173,9 +174,9 @@ export function QuickPointButtons({
               <Button
                 size="sm"
                 onClick={() => submit("POSITIVE", tagInput || undefined)}
-                className="w-full bg-emerald hover:bg-emerald-dark"
+                className="w-full bg-emerald hover:bg-emerald-dark cursor-pointer font-medium"
               >
-                ثبت
+                تأیید و ثبت امتیاز مثبت
               </Button>
             </div>
           </PopoverContent>
@@ -192,11 +193,12 @@ export function QuickPointButtons({
             onPointerUp={() => endPress("NEGATIVE")}
             onPointerLeave={cancelPress}
             className={cn(
-              "rounded-full flex items-center justify-center font-bold transition-all",
+              "rounded-full flex items-center justify-center font-bold transition-all cursor-pointer active:scale-90",
               "bg-destructive/10 text-destructive hover:bg-destructive hover:text-white",
               "disabled:opacity-50 disabled:cursor-not-allowed",
               isSm ? "h-7 w-7" : "h-9 w-9"
             )}
+            aria-label={`ثبت امتیاز منفی برای ${studentName}`}
             title="امتیاز منفی (نگه دارید برای انتخاب علت)"
           >
             {loading === "NEGATIVE" ? (
@@ -209,10 +211,10 @@ export function QuickPointButtons({
         {tagMenuOpen === "NEGATIVE" && (
           <PopoverContent className="w-64" align="start">
             <div className="space-y-2">
-              <p className="text-xs font-semibold text-destructive">امتیاز منفی برای {studentName}</p>
+              <p className="text-xs font-semibold text-destructive">ثبت تذکر یا امتیاز منفی برای {studentName}</p>
               <Input
                 autoFocus
-                placeholder="علت (اختیاری)..."
+                placeholder="علت تذکر (اختیاری)..."
                 value={tagInput}
                 onChange={(e) => setTagInput(e.target.value)}
                 onKeyDown={(e) => {
@@ -224,7 +226,7 @@ export function QuickPointButtons({
                   <button
                     key={t}
                     onClick={() => submit("NEGATIVE", t)}
-                    className="text-[10px] px-2 py-0.5 rounded-full bg-destructive/10 text-destructive hover:bg-destructive hover:text-white transition"
+                    className="text-[10px] px-2 py-0.5 rounded-full bg-destructive/10 text-destructive hover:bg-destructive hover:text-white transition cursor-pointer"
                   >
                     {t}
                   </button>
@@ -233,9 +235,9 @@ export function QuickPointButtons({
               <Button
                 size="sm"
                 onClick={() => submit("NEGATIVE", tagInput || undefined)}
-                className="w-full bg-destructive hover:bg-destructive/90"
+                className="w-full bg-destructive hover:bg-destructive/90 cursor-pointer font-medium"
               >
-                ثبت
+                تأیید و ثبت امتیاز منفی
               </Button>
             </div>
           </PopoverContent>

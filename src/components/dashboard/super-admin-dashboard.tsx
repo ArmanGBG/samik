@@ -56,6 +56,8 @@ export function SuperAdminDashboard() {
         const r = await fetch("/api/v1/super-admin/schools");
         const d = await r.json();
         if (d.ok) setSchools(d.schools as SchoolRow[]);
+      } catch (err) {
+        console.error("[LOAD_SUPER_ADMIN_DASHBOARD_ERROR]", err);
       } finally {
         setLoading(false);
       }
@@ -86,10 +88,10 @@ export function SuperAdminDashboard() {
         subtitle="نظارت بر کل پلتفرم"
         icon={Building2}
         actions={
-          <Button asChild className="bg-navy hover:bg-navy-dark">
+          <Button asChild className="bg-navy hover:bg-navy-dark gap-2 shadow-sm">
             <Link href="/super-admin/schools">
               <Plus className="h-4 w-4" />
-              <span>مدیریت مدارس</span>
+              <span>مدیریت و ثبت مدارس جدید</span>
             </Link>
           </Button>
         }

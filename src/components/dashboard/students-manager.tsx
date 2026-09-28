@@ -122,6 +122,8 @@ export function StudentsManager() {
       if (clsD.ok) setClassrooms(clsD.classrooms as Classroom[]);
       if (!stuD.ok) toast.error(stuD.error!);
       if (!clsD.ok) toast.error(clsD.error!);
+    } catch {
+      toast.error("خطا در برقراری ارتباط با سرور.");
     } finally {
       setLoading(false);
     }
@@ -206,6 +208,8 @@ export function StudentsManager() {
         guardianPhone2: "",
       });
       load();
+    } catch {
+      toast.error("خطا در برقراری ارتباط با سرور.");
     } finally {
       setSubmitting(false);
     }
@@ -371,14 +375,19 @@ export function StudentsManager() {
                     !form.guardianPhone1 ||
                     !form.classRoomId
                   }
-                  className="bg-emerald hover:bg-emerald-dark h-9 gap-2"
+                  className="bg-emerald hover:bg-emerald-dark h-9 gap-2 cursor-pointer font-medium"
                 >
                   {submitting ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      در حال ثبت‌نام دانش‌آموز...
+                    </>
                   ) : (
-                    <Plus className="h-4 w-4" />
+                    <>
+                      <Plus className="h-4 w-4" />
+                      ثبت‌نام و افزودن دانش‌آموز
+                    </>
                   )}
-                  ثبت‌نام دانش‌آموز
                 </Button>
               </div>
             </div>

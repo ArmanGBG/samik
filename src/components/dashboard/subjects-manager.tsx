@@ -65,6 +65,9 @@ export function SubjectsManager() {
       const r = await fetch("/api/v1/principal/subjects");
       const d = await r.json();
       if (d.ok) setSubjects(d.subjects);
+    } catch (err) {
+      console.error("[LOAD_SUBJECTS_ERROR]", err);
+      toast.error("خطا در دریافت لیست دروس.");
     } finally {
       setLoading(false);
     }
@@ -91,6 +94,8 @@ export function SubjectsManager() {
       toast.success(`درس «${title}» ثبت شد.`);
       setTitle("");
       load();
+    } catch {
+      toast.error("خطا در برقراری ارتباط با سرور.");
     } finally {
       setSubmitting(false);
     }
@@ -98,16 +103,20 @@ export function SubjectsManager() {
 
   async function onDelete(id: string, title: string) {
     if (!confirm(`حذف درس «${title}»؟`)) return;
-    const r = await fetch(`/api/v1/principal/subjects?id=${id}`, {
-      method: "DELETE",
-    });
-    const d = await r.json();
-    if (!d.ok) {
-      toast.error(d.error ?? "حذف ناموفق بود.");
-      return;
+    try {
+      const r = await fetch(`/api/v1/principal/subjects?id=${id}`, {
+        method: "DELETE",
+      });
+      const d = await r.json();
+      if (!d.ok) {
+        toast.error(d.error ?? "حذف ناموفق بود.");
+        return;
+      }
+      toast.success("درس حذف شد.");
+      load();
+    } catch {
+      toast.error("خطا در برقراری ارتباط با سرور.");
     }
-    toast.success("درس حذف شد.");
-    load();
   }
 
   function toggleSort(key: SortKey) {
@@ -185,15 +194,18 @@ export function SubjectsManager() {
             <Button
               type="submit"
               disabled={submitting || !title}
-              className="bg-emerald hover:bg-emerald-dark cursor-pointer"
+              className="bg-emerald hover:bg-emerald-dark cursor-pointer gap-2"
             >
               {submitting ? (
                 <>
-                  <Loader2 className="ml-2 h-4 w-4 animate-spin" />
-                  در حال ثبت...
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  در حال ثبت درس جدید...
                 </>
               ) : (
-                "ثبت درس"
+                <>
+                  <Plus className="h-4 w-4" />
+                  ثبت و تعریف درس جدید
+                </>
               )}
             </Button>
           </CardFooter>
@@ -276,14 +288,15 @@ export function SubjectsManager() {
                                   onClick={() => onDelete(s.id, s.title)}
                                   disabled={s.slotCount > 0}
                                   className="text-destructive hover:text-destructive hover:bg-destructive/10 cursor-pointer h-8 w-8 p-0 disabled:opacity-40 disabled:cursor-not-allowed"
+                                  aria-label={`حذف درس ${s.title}`}
                                 >
                                   <Trash2 className="h-4 w-4" />
                                 </Button>
                               </TooltipTrigger>
                               <TooltipContent side="top">
                                 {s.slotCount > 0
-                                  ? "این درس در برنامهٔ هفتگی استفاده شده است."
-                                  : "حذف درس"}
+                                  ? "این درس در برنامهٔ هفتگی استفاده شده و قابل حذف نیست."
+                                  : `حذف درس «${s.title}»`}
                               </TooltipContent>
                             </Tooltip>
                           </TooltipProvider>

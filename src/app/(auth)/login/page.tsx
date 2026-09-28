@@ -65,6 +65,8 @@ export default function LoginPage() {
       }
       // Pass phone via URL search to prefill the verify page
       router.push(`/verify?phone=${encodeURIComponent(phone)}`);
+    } catch {
+      toast.error("خطای شبکه در برقراری ارتباط با سرور.");
     } finally {
       setLoading(false);
     }
@@ -121,17 +123,17 @@ export default function LoginPage() {
           <CardFooter className="p-6 pt-2 flex flex-col gap-3">
             <Button
               type="submit"
-              className="stagger-item w-full h-10 bg-navy hover:bg-navy-dark cursor-pointer"
+              className="stagger-item w-full h-11 bg-navy hover:bg-navy-dark text-base font-semibold shadow-md shadow-navy/20 cursor-pointer gap-2"
               style={{ animationDelay: "90ms" }}
               disabled={loading || !/^09\d{9}$/.test(phone)}
             >
               {loading ? (
                 <>
-                  <Loader2 className="ml-2 h-4 w-4 animate-spin" />
-                  در حال ارسال...
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  در حال ارسال کد ورود...
                 </>
               ) : (
-                "ارسال کد یک‌بار مصرف"
+                "دریافت کد تأیید ورود"
               )}
             </Button>
 

@@ -128,6 +128,9 @@ export function TimetableBuilder() {
       if (subR.ok) setSubjects(subR.subjects);
       if (tchR.ok) setTeachers(tchR.teachers);
       if (bellR.ok) setBells(bellR.bellSchedules);
+    } catch (err) {
+      console.error("[TIMETABLE_LOAD_ERROR]", err);
+      toast.error("خطا در بارگذاری برنامه هفتگی.");
     } finally {
       setLoading(false);
     }
@@ -200,6 +203,8 @@ export function TimetableBuilder() {
         weekType: "ALL_WEEKS",
       });
       loadAll();
+    } catch {
+      toast.error("خطا در برقراری ارتباط با سرور.");
     } finally {
       setSubmitting(false);
     }
@@ -207,14 +212,18 @@ export function TimetableBuilder() {
 
   async function onDelete(id: string) {
     if (!confirm("حذف این خانه برنامه هفتگی؟")) return;
-    const r = await fetch(`/api/v1/deputy/timetable?id=${id}`, { method: "DELETE" });
-    const d = await r.json();
-    if (!d.ok) {
-      toast.error(d.error ?? "حذف ناموفق بود.");
-      return;
+    try {
+      const r = await fetch(`/api/v1/deputy/timetable?id=${id}`, { method: "DELETE" });
+      const d = await r.json();
+      if (!d.ok) {
+        toast.error(d.error ?? "حذف ناموفق بود.");
+        return;
+      }
+      toast.success("حذف شد.");
+      loadAll();
+    } catch {
+      toast.error("خطا در برقراری ارتباط با سرور.");
     }
-    toast.success("حذف شد.");
-    loadAll();
   }
 
   if (loading) {
@@ -286,9 +295,9 @@ export function TimetableBuilder() {
             }}
           >
             <DialogTrigger asChild>
-              <Button className="bg-emerald hover:bg-emerald-dark">
+              <Button className="bg-emerald hover:bg-emerald-dark gap-2 shadow-sm cursor-pointer">
                 <Plus className="h-4 w-4" />
-                افزودن خانه برنامه
+                افزودن درس به برنامه هفتگی
               </Button>
             </DialogTrigger>
             <DialogContent className="max-w-lg">
@@ -413,19 +422,19 @@ export function TimetableBuilder() {
                     </Select>
                   </div>
                 </div>
-                <DialogFooter>
+                <DialogFooter className="gap-2">
                   <Button
                     type="submit"
                     disabled={submitting || !form.classRoomId || !form.subjectId || !form.teacherUserId || !form.bellScheduleId}
-                    className="bg-emerald hover:bg-emerald-dark"
+                    className="bg-emerald hover:bg-emerald-dark gap-2 cursor-pointer"
                   >
                     {submitting ? (
                       <>
                         <Loader2 className="h-4 w-4 animate-spin" />
-                        در حال بررسی تداخل...
+                        در حال بررسی تداخل زمانی و ثبت...
                       </>
                     ) : (
-                      "ثبت خانه"
+                      "تأیید و ثبت در برنامه هفتگی"
                     )}
                   </Button>
                 </DialogFooter>
@@ -449,9 +458,12 @@ export function TimetableBuilder() {
               {classrooms.map((c) => (
                 <button
                   key={c.id}
+                  type="button"
+                  aria-pressed={activeClassroom === c.id}
+                  aria-label={`نمایش برنامه هفتگی کلاس ${c.gradeLevel} ${c.name}`}
                   onClick={() => setActiveClassroom(c.id)}
                   className={cn(
-                    "px-3 py-2 rounded-lg text-sm font-medium border transition-all cursor-pointer",
+                    "px-3 py-2 rounded-lg text-sm font-medium border transition-all cursor-pointer active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-navy/30",
                     activeClassroom === c.id
                       ? "bg-navy text-white border-navy shadow-sm"
                       : "border-border bg-white hover:border-navy/50 hover:bg-muted/40"
@@ -555,13 +567,13 @@ export function TimetableBuilder() {
                                             <button
                                               onClick={() => onDelete(s.id)}
                                               className="opacity-0 group-hover:opacity-100 transition-opacity text-destructive hover:bg-destructive/10 rounded p-0.5 cursor-pointer"
-                                              aria-label="حذف خانه برنامه"
+                                              aria-label="حذف این درس از برنامه هفتگی"
                                             >
                                               <Trash2 className="h-3 w-3" />
                                             </button>
                                           </TooltipTrigger>
                                           <TooltipContent side="top">
-                                            <span>حذف خانه برنامه</span>
+                                            <span>حذف این درس از برنامه هفتگی</span>
                                           </TooltipContent>
                                         </Tooltip>
                                       </TooltipProvider>

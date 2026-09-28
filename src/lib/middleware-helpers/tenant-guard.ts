@@ -44,34 +44,56 @@ export async function withTenantContext<T>(
     return forbiddenResponse("نقش شما برای این عملیات کافی نیست.") as unknown as T;
   }
 
-  // Deep Tenant Guard: for SUPER_ADMIN, skip school-active check
-  return runWithTenant({ userId, schoolId, role, bypassTenantFilter: false }, async () => {
-    if (role === "SUPER_ADMIN") {
-      // SuperAdmin has no tenant scope. Run handler with bypass.
-      return runWithTenant({ userId, schoolId: null, role, bypassTenantFilter: true }, () =>
-        handler({ userId, schoolId, role })
-      );
-    }
-
-    const school = await db.school.findUnique({
-      where: { id: schoolId },
-      select: { id: true, status: true },
-    });
-    if (!school || school.status !== "ACTIVE") {
-      return forbiddenResponse("مدرسه غیرفعال یا نامعتبر است.") as unknown as T;
-    }
-    // For staff roles, confirm employment still exists
-    if (role !== "STUDENT") {
-      const employment = await db.staffEmployment.findUnique({
-        where: { schoolId_userId: { schoolId, userId } },
-        select: { id: true, role: true },
-      });
-      if (!employment || employment.role !== role) {
-        return forbiddenResponse("عضویت شما در این مدرسه معتبر نیست.") as unknown as T;
+  try {
+    // Deep Tenant Guard: for SUPER_ADMIN, skip school-active check
+    return await runWithTenant({ userId, schoolId, role, bypassTenantFilter: false }, async () => {
+      if (role === "SUPER_ADMIN") {
+        // SuperAdmin has no tenant scope. Run handler with bypass.
+        return runWithTenant({ userId, schoolId: null, role, bypassTenantFilter: true }, () =>
+          handler({ userId, schoolId, role })
+        );
       }
-    }
-    return handler({ userId, schoolId, role, enrollmentId });
-  });
+
+      let school, employment;
+      try {
+        school = await db.school.findUnique({
+          where: { id: schoolId },
+          select: { id: true, status: true },
+        });
+      } catch (err) {
+        console.error("[TENANT_GUARD_SCHOOL_DB_ERROR]", err);
+        return NextResponse.json(
+          { ok: false, error: "خطا در ارتباط با پایگاه داده مدرسه." },
+          { status: 500 }
+        ) as unknown as T;
+      }
+      if (!school || school.status !== "ACTIVE") {
+        return forbiddenResponse("مدرسه غیرفعال یا نامعتبر است.") as unknown as T;
+      }
+      // For staff roles, confirm employment still exists
+      if (role !== "STUDENT") {
+        try {
+          employment = await db.staffEmployment.findUnique({
+            where: { schoolId_userId: { schoolId, userId } },
+            select: { id: true, role: true },
+          });
+        } catch (err) {
+          console.error("[TENANT_GUARD_STAFF_DB_ERROR]", err);
+          return NextResponse.json(
+            { ok: false, error: "خطا در بررسی سطح دسترسی پرسنل." },
+            { status: 500 }
+          ) as unknown as T;
+        }
+        if (!employment || employment.role !== role) {
+          return forbiddenResponse("عضویت شما در این مدرسه معتبر نیست.") as unknown as T;
+        }
+      }
+      return handler({ userId, schoolId, role, enrollmentId });
+    });
+  } catch (error) {
+    console.error("[TENANT_GUARD_ERROR]", error);
+    return internalServerErrorResponse() as unknown as T;
+  }
 }
 
 function unauthorizedResponse() {
@@ -83,6 +105,13 @@ function unauthorizedResponse() {
 
 function forbiddenResponse(msg: string) {
   return NextResponse.json({ ok: false, error: msg }, { status: 403 });
+}
+
+function internalServerErrorResponse() {
+  return NextResponse.json(
+    { ok: false, error: "خطای غیرمنتظره در سرور رخ داد. لطفاً مجدداً تلاش کنید." },
+    { status: 500 }
+  );
 }
 
 /**
@@ -97,8 +126,13 @@ export async function withSuperAdmin<T>(
   if (!userId || role !== "SUPER_ADMIN") {
     return forbiddenResponse("این عملیات نیازمند نقش مدیر سامانه است.") as unknown as T;
   }
-  // SuperAdmin runs WITHOUT a tenant context (schoolId = null)
-  return runWithTenant({ userId, schoolId: null, role, bypassTenantFilter: true }, () =>
-    handler({ userId })
-  );
+  try {
+    // SuperAdmin runs WITHOUT a tenant context (schoolId = null)
+    return await runWithTenant({ userId, schoolId: null, role, bypassTenantFilter: true }, () =>
+      handler({ userId })
+    );
+  } catch (error) {
+    console.error("[SUPER_ADMIN_GUARD_ERROR]", error);
+    return internalServerErrorResponse() as unknown as T;
+  }
 }

@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
+import { useRealtimeEvent } from "@/lib/realtime/realtime-context";
 import Link from "next/link";
 import {
   Building2,
@@ -134,30 +135,39 @@ export function PrincipalDashboard() {
   const [school, setSchool] = useState<SchoolInfo | null>(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    (async () => {
-      try {
-        const [roomsRes, subjectsRes, bellsRes, schoolRes] = await Promise.all([
-          fetch("/api/v1/principal/classrooms"),
-          fetch("/api/v1/principal/subjects"),
-          fetch("/api/v1/principal/bell-schedules"),
-          fetch("/api/v1/principal/school-config"),
-        ]);
-        const [rooms, subs, bellData, schoolData] = await Promise.all([
-          roomsRes.json(),
-          subjectsRes.json(),
-          bellsRes.json(),
-          schoolRes.json(),
-        ]);
-        if (rooms.ok) setClassrooms(rooms.classrooms);
-        if (subs.ok) setSubjects(subs.subjects);
-        if (bellData.ok) setBells(bellData.bellSchedules);
-        if (schoolData.ok) setSchool(schoolData.school);
-      } finally {
-        setLoading(false);
-      }
-    })();
+  const load = useCallback(async () => {
+    try {
+      const [roomsRes, subjectsRes, bellsRes, schoolRes] = await Promise.all([
+        fetch("/api/v1/principal/classrooms"),
+        fetch("/api/v1/principal/subjects"),
+        fetch("/api/v1/principal/bell-schedules"),
+        fetch("/api/v1/principal/school-config"),
+      ]);
+      const [rooms, subs, bellData, schoolData] = await Promise.all([
+        roomsRes.json(),
+        subjectsRes.json(),
+        bellsRes.json(),
+        schoolRes.json(),
+      ]);
+      if (rooms.ok) setClassrooms(rooms.classrooms);
+      if (subs.ok) setSubjects(subs.subjects);
+      if (bellData.ok) setBells(bellData.bellSchedules);
+      if (schoolData.ok) setSchool(schoolData.school);
+    } catch (err) {
+      console.error("[PRINCIPAL_DASHBOARD_LOAD_ERROR]", err);
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  // Real-time synchronization: automatically re-fetch dashboard KPIs
+  useRealtimeEvent("*", () => {
+    void load();
+  });
 
   const totalClassrooms = classrooms.length;
   const totalSubjects = subjects.length;

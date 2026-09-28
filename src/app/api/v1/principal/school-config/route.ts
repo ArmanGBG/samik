@@ -20,9 +20,9 @@ export async function PATCH(req: NextRequest) {
     let body: z.infer<typeof UpdateBody>;
     try {
       body = UpdateBody.parse(await req.json());
-    } catch (e) {
+    } catch (e: any) {
       return NextResponse.json(
-        { ok: false, error: (e as z.ZodError).errors?.[0]?.message ?? "ورودی نامعتبر" },
+        { ok: false, error: e?.issues?.[0]?.message ?? e?.errors?.[0]?.message ?? "ورودی نامعتبر" },
         { status: 400 }
       );
     }

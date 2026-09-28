@@ -92,10 +92,10 @@ export function Hero() {
               <Button
                 size="lg"
                 asChild
-                className="bg-navy hover:bg-navy-dark text-white h-12 px-7 text-base gap-2 shadow-lg shadow-navy/20"
+                className="bg-navy hover:bg-navy-dark text-white h-12 px-7 text-base font-semibold gap-2 shadow-lg shadow-navy/20 cursor-pointer"
               >
                 <Link href="/login">
-                  ورود به سیستم
+                  ورود به پنل کاربری سامیک
                   <ArrowLeft className="h-4 w-4" />
                 </Link>
               </Button>
@@ -103,11 +103,11 @@ export function Hero() {
                 size="lg"
                 variant="outline"
                 asChild
-                className="h-12 px-7 text-base gap-2 border-border hover:border-navy hover:bg-navy/5"
+                className="h-12 px-7 text-base font-medium gap-2 border-border hover:border-navy hover:bg-navy/5 cursor-pointer"
               >
                 <a href="#contact">
                   <PlayCircle className="h-4 w-4" />
-                  درخواست دمو
+                  درخواست نمایش دمو
                 </a>
               </Button>
             </motion.div>

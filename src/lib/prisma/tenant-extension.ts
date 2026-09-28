@@ -74,7 +74,7 @@ function injectWhereFilter<T>(where: T, schoolId: string, model: string): T {
   return { ...(where as object), schoolId } as unknown as T;
 }
 
-export const tenantExtension = Prisma.defineExtension((client: PrismaClient) => {
+export const tenantExtension = Prisma.defineExtension((client: any) => {
   return client.$extends({
     name: "samik-tenant-isolation",
     query: {
@@ -154,7 +154,7 @@ export const tenantExtension = Prisma.defineExtension((client: PrismaClient) => 
           const sid = currentSchoolId();
           if (isTenantScoped(model) && sid && model !== "School") {
             const data = Array.isArray(args.data) ? args.data : [args.data];
-            args.data = data.map((d) => ({ ...(d as object), schoolId: sid }));
+            args.data = data.map((d) => ({ ...(d as object), schoolId: sid })) as any;
           }
           return query(args);
         },
@@ -162,7 +162,7 @@ export const tenantExtension = Prisma.defineExtension((client: PrismaClient) => 
           const sid = currentSchoolId();
           if (isTenantScoped(model) && sid && model !== "School") {
             const data = Array.isArray(args.data) ? args.data : [args.data];
-            args.data = data.map((d) => ({ ...(d as object), schoolId: sid }));
+            args.data = data.map((d) => ({ ...(d as object), schoolId: sid })) as any;
           }
           return query(args);
         },
@@ -191,7 +191,7 @@ export const tenantExtension = Prisma.defineExtension((client: PrismaClient) => 
           const sid = currentSchoolId();
           if (isTenantScoped(model) && sid && model !== "School") {
             args.where = injectWhereFilter(args.where, sid, model);
-            args.create = { ...(args.create as object), schoolId: sid };
+            args.create = { ...(args.create as object), schoolId: sid } as any;
             args.update = { ...(args.update as object) };
             if ("schoolId" in (args.update as object)) {
               delete (args.update as Record<string, unknown>).schoolId;

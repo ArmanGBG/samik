@@ -1,0 +1,17 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: samic-postgres
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-samic}
+    volumes:
+      - samic_pgdata:/var/lib/postgresql/data
+
+volumes:
+  samic_pgdata:
+    name: samic_pgdata

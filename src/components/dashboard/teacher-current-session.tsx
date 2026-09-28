@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRealtimeEvent } from "@/lib/realtime/realtime-context";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import {
@@ -95,6 +96,9 @@ export function TeacherCurrentSession() {
       const d = await r.json();
       if (d.ok) setData(d);
       else toast.error(d.error ?? "خطا در دریافت جلسه فعلی.");
+    } catch (err) {
+      console.error("[LOAD_TEACHER_CURRENT_SESSION_ERROR]", err);
+      if (!silent) toast.error("خطا در برقراری ارتباط با سرور.");
     } finally {
       if (silent) setRefreshing(false); else setLoading(false);
     }
@@ -106,6 +110,10 @@ export function TeacherCurrentSession() {
     const id = setInterval(() => load(true), 60_000);
     return () => clearInterval(id);
   }, []);
+
+  useRealtimeEvent(["attendance:submitted", "attendance:excused"], () => {
+    void load(true);
+  });
 
   if (loading) {
     return (
@@ -154,10 +162,10 @@ export function TeacherCurrentSession() {
         size="sm"
         onClick={() => load(true)}
         disabled={refreshing}
-        className="h-8 gap-1.5 text-xs"
+        className="h-8 gap-1.5 text-xs cursor-pointer"
       >
         <RefreshCw className={cn("h-3.5 w-3.5", refreshing && "animate-spin")} />
-        به‌روزرسانی
+        به‌روزرسانی وضعیت کلاس
       </Button>
     </div>
   );
@@ -195,11 +203,11 @@ export function TeacherCurrentSession() {
                 </div>
                 <Button
                   variant="secondary"
-                  className="bg-white text-emerald hover:bg-white/90 h-10 px-5 shadow-sm"
+                  className="bg-white text-emerald-700 hover:bg-white/90 h-10 px-5 shadow-sm font-semibold gap-2 cursor-pointer"
                   onClick={() => router.push(`/teacher/attendance/${activeSession.slotId}`)}
                 >
                   <PlayCircle className="h-4 w-4" />
-                  شروع حضور و غیاب
+                  ورود به ثبت حضور و غیاب
                 </Button>
               </div>
 
@@ -293,12 +301,32 @@ export function TeacherCurrentSession() {
                           <span className="truncate">{item.bellTitle}</span>
                         </div>
                       </div>
-                      <Badge
-                        variant="outline"
-                        className={cn("text-[10px] shrink-0", tint)}
-                      >
-                        {WEEK_TYPE_LABEL[item.weekType] ?? item.weekType}
-                      </Badge>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <Badge
+                          variant="outline"
+                          className={cn("text-[10px] hidden sm:inline-flex", tint)}
+                        >
+                          {WEEK_TYPE_LABEL[item.weekType] ?? item.weekType}
+                        </Badge>
+                        <Button
+                          size="sm"
+                          variant="default"
+                          className="h-8 text-xs bg-emerald hover:bg-emerald-600 gap-1 px-2.5 cursor-pointer font-medium"
+                          onClick={() => router.push(`/teacher/attendance/${item.slotId}`)}
+                        >
+                          <PlayCircle className="h-3.5 w-3.5" />
+                          حضور و غیاب
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-8 text-xs gap-1 px-2.5 cursor-pointer text-navy hover:bg-navy/5 font-medium"
+                          onClick={() => router.push(`/teacher/gradebook/${item.classRoomId}`)}
+                        >
+                          <BookOpen className="h-3.5 w-3.5" />
+                          دفتر نمره
+                        </Button>
+                      </div>
                     </div>
                   );
                 })}

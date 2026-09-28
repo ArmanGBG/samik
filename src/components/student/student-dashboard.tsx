@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
+import { useRealtimeEvent } from "@/lib/realtime/realtime-context";
 import {
   ResponsiveContainer,
   LineChart,
@@ -153,6 +154,22 @@ export function StudentDashboard() {
   useEffect(() => {
     if (activeEnrollment) loadData();
   }, [activeEnrollment, loadData]);
+
+  // Real-time synchronization: automatically re-fetch whenever grades,
+  // behavioral points, or attendance records change for this student!
+  useRealtimeEvent(
+    ["grade:saved", "behavioral-point:created", "attendance:submitted", "attendance:excused"],
+    (event) => {
+      void loadData();
+      if (event.type === "grade:saved") {
+        toast.info("نمره جدیدی در سامانه ثبت شد و کارنامه به‌روزرسانی گردید.");
+      } else if (event.type === "behavioral-point:created") {
+        toast.info("امتیاز انضباطی جدیدی ثبت گردید.");
+      } else if (event.type === "attendance:excused") {
+        toast.success("وضعیت غیبت به موجه تغییر یافت.");
+      }
+    }
+  );
 
   // Prepare chart data — handle edge cases per Section 7:
   //   - Missing numeric grades: filtered out (no point on the chart)

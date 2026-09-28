@@ -29,9 +29,9 @@ export async function POST(req: NextRequest) {
     let body: z.infer<typeof CreateSchoolBody>;
     try {
       body = CreateSchoolBody.parse(await req.json());
-    } catch (e) {
+    } catch (e: any) {
       return NextResponse.json(
-        { ok: false, error: (e as z.ZodError).errors?.[0]?.message ?? "ورودی نامعتبر" },
+        { ok: false, error: e?.issues?.[0]?.message ?? e?.errors?.[0]?.message ?? "ورودی نامعتبر" },
         { status: 400 }
       );
     }
@@ -134,5 +134,75 @@ export async function GET(req: NextRequest) {
       },
     });
     return NextResponse.json({ ok: true, schools });
+  });
+}
+
+const PatchSchoolBody = z.object({
+  name: z.string().min(2).optional(),
+  status: z.enum(["ACTIVE", "SUSPENDED"]).optional(),
+  smsBalance: z.number().int().min(0).optional(),
+});
+
+/**
+ * PATCH /api/v1/super-admin/schools?id=...
+ *
+ * Update school status (ACTIVE / SUSPENDED) or details.
+ */
+export async function PATCH(req: NextRequest) {
+  return withSuperAdmin(req, async () => {
+    const id = req.nextUrl.searchParams.get("id");
+    if (!id || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id)) {
+      return NextResponse.json({ ok: false, error: "شناسه مدرسه نامعتبر است." }, { status: 400 });
+    }
+
+    let body: z.infer<typeof PatchSchoolBody>;
+    try {
+      body = PatchSchoolBody.parse(await req.json());
+    } catch (e: any) {
+      return NextResponse.json(
+        { ok: false, error: e?.issues?.[0]?.message ?? e?.errors?.[0]?.message ?? "ورودی نامعتبر" },
+        { status: 400 }
+      );
+    }
+
+    try {
+      const updated = await db.school.update({
+        where: { id },
+        data: body,
+      });
+      return NextResponse.json({ ok: true, school: updated });
+    } catch (err) {
+      console.error("[SUPER_ADMIN_PATCH_SCHOOL_ERROR]", err);
+      return NextResponse.json({ ok: false, error: "خطا در ویرایش اطلاعات مدرسه." }, { status: 500 });
+    }
+  });
+}
+
+/**
+ * DELETE /api/v1/super-admin/schools?id=...
+ *
+ * Suspends the school (Soft-deactivation to preserve academic records per Section 9).
+ */
+export async function DELETE(req: NextRequest) {
+  return withSuperAdmin(req, async () => {
+    const id = req.nextUrl.searchParams.get("id");
+    if (!id || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id)) {
+      return NextResponse.json({ ok: false, error: "شناسه مدرسه نامعتبر است." }, { status: 400 });
+    }
+
+    try {
+      const updated = await db.school.update({
+        where: { id },
+        data: { status: "SUSPENDED" },
+      });
+      return NextResponse.json({
+        ok: true,
+        message: "مدرسه با موفقیت غیرفعال (تعلیق) شد.",
+        school: updated,
+      });
+    } catch (err) {
+      console.error("[SUPER_ADMIN_DELETE_SCHOOL_ERROR]", err);
+      return NextResponse.json({ ok: false, error: "خطا در غیرفعال‌سازی مدرسه." }, { status: 500 });
+    }
   });
 }

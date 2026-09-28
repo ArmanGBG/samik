@@ -9,7 +9,7 @@ const AddStaffBody = z.object({
   firstName: z.string().min(1, "نام الزامی است."),
   lastName: z.string().min(1, "نام خانوادگی الزامی است."),
   role: z.enum(["DEPUTY", "TEACHER"], {
-    errorMap: () => ({ message: "نقش باید ناظم یا معلم باشد." }),
+    message: "نقش باید ناظم یا معلم باشد.",
   }),
 });
 
@@ -36,19 +36,22 @@ export async function GET(req: NextRequest) {
       },
     });
 
-    // For teachers, count their timetable slots in this school
-    const teacherSlotCounts = await Promise.all(
-      employments
-        .filter((e) => e.role === "TEACHER")
-        .map(async (e) => ({
-          userId: e.userId,
-          count: await db.timetableSlot.count({
-            where: { teacherUserId: e.userId },
-          }),
-        }))
-    );
+    // For teachers, count their timetable slots in this school in a single groupBy query (solves N+1)
+    const teacherIds = employments
+      .filter((e) => e.role === "TEACHER")
+      .map((e) => e.userId);
+
+    const slotCounts =
+      teacherIds.length > 0
+        ? await db.timetableSlot.groupBy({
+            by: ["teacherUserId"],
+            where: { teacherUserId: { in: teacherIds } },
+            _count: { id: true },
+          })
+        : [];
+
     const slotCountMap = new Map(
-      teacherSlotCounts.map((t) => [t.userId, t.count])
+      slotCounts.map((s) => [s.teacherUserId, s._count.id])
     );
 
     return NextResponse.json({
@@ -86,13 +89,13 @@ export async function GET(req: NextRequest) {
  *     employment of the same user in the same school.
  */
 export async function POST(req: NextRequest) {
-  return withTenantContext(req, ["PRINCIPAL"], async () => {
+  return withTenantContext(req, ["PRINCIPAL"], async (ctx) => {
     let body: z.infer<typeof AddStaffBody>;
     try {
       body = AddStaffBody.parse(await req.json());
-    } catch (e) {
+    } catch (e: any) {
       return NextResponse.json(
-        { ok: false, error: (e as z.ZodError).errors?.[0]?.message ?? "ورودی نامعتبر" },
+        { ok: false, error: e?.issues?.[0]?.message ?? e?.errors?.[0]?.message ?? "ورودی نامعتبر" },
         { status: 400 }
       );
     }
@@ -125,7 +128,7 @@ export async function POST(req: NextRequest) {
 
     // Check if already employed in this school
     const existing = await db.staffEmployment.findUnique({
-      where: { schoolId_userId: { schoolId: req.headers.get("x-samik-school-id")!, userId: user.id } },
+      where: { schoolId_userId: { schoolId: ctx.schoolId, userId: user.id } },
     });
     if (existing) {
       return NextResponse.json(
@@ -138,11 +141,12 @@ export async function POST(req: NextRequest) {
     }
 
     // Create the employment record
-    const employment = await db.staffEmployment.create({
+    const employment: any = await db.staffEmployment.create({
       data: {
         userId: user.id,
         role: body.role,
-      },
+        schoolId: ctx.schoolId,
+      } as any,
       include: {
         user: {
           select: { id: true, firstName: true, lastName: true, phoneNumber: true, nationalCode: true },
@@ -265,9 +269,9 @@ export async function PATCH(req: NextRequest) {
     let body: z.infer<typeof PatchStaffBody>;
     try {
       body = PatchStaffBody.parse(await req.json());
-    } catch (e) {
+    } catch (e: any) {
       return NextResponse.json(
-        { ok: false, error: (e as z.ZodError).errors?.[0]?.message ?? "ورودی نامعتبر" },
+        { ok: false, error: e?.issues?.[0]?.message ?? e?.errors?.[0]?.message ?? "ورودی نامعتبر" },
         { status: 400 }
       );
     }

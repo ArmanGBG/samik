@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
+import { useRealtimeEvent } from "@/lib/realtime/realtime-context";
 import {
   flexRender,
   getCoreRowModel,
@@ -139,6 +140,10 @@ export function GradebookGrid({ classId }: { classId: string }) {
       const r = await fetch(`/api/v1/gradebook?classroomId=${classId}`);
       const d = await r.json();
       if (d.ok) setData(d);
+      else toast.error(d.error ?? "خطا در دریافت اطلاعات دفتر نمره.");
+    } catch (err) {
+      console.error("[LOAD_GRADEBOOK_ERROR]", err);
+      toast.error("خطا در برقراری ارتباط با سرور.");
     } finally {
       setLoading(false);
     }
@@ -147,6 +152,12 @@ export function GradebookGrid({ classId }: { classId: string }) {
   useEffect(() => {
     load();
   }, [load]);
+
+  // Real-time synchronization: automatically update the matrix when grades
+  // or behavioral points are submitted
+  useRealtimeEvent(["grade:saved", "behavioral-point:created"], () => {
+    void load();
+  });
 
   const columns = useMemo<ColumnDef<MatrixStudent>[]>(() => {
     if (!data) return [];
@@ -286,6 +297,8 @@ export function GradebookGrid({ classId }: { classId: string }) {
       setEditing(null);
       setEditValue("");
       load();
+    } catch {
+      toast.error("خطا در برقراری ارتباط با سرور.");
     } finally {
       setSaving(false);
     }
@@ -318,6 +331,8 @@ export function GradebookGrid({ classId }: { classId: string }) {
       });
       setDialogOpen(false);
       load();
+    } catch {
+      toast.error("خطا در برقراری ارتباط با سرور.");
     } finally {
       setSaving(false);
     }
@@ -346,16 +361,16 @@ export function GradebookGrid({ classId }: { classId: string }) {
         actions={
           <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
             <DialogTrigger asChild>
-              <Button className="bg-emerald hover:bg-emerald-dark h-9 gap-2">
+              <Button className="bg-emerald hover:bg-emerald-dark h-9 gap-2 shadow-sm cursor-pointer font-medium">
                 <Plus className="h-4 w-4" />
-                ارزیابی جدید
+                تعریف ارزیابی جدید
               </Button>
             </DialogTrigger>
             <DialogContent className="max-w-md">
               <DialogHeader>
-                <DialogTitle className="text-navy">ایجاد ارزیابی جدید</DialogTitle>
+                <DialogTitle className="text-navy">تعریف و ایجاد ارزیابی کلاسی</DialogTitle>
                 <DialogDescription>
-                  نوع ارزیابی را انتخاب کنید. نمرات بعد از ایجاد قابل ثبت هستند.
+                  عنوان و نوع سنجش را مشخص کنید. پس از ایجاد، نمرات در جدول قابل ثبت خواهند بود.
                 </DialogDescription>
               </DialogHeader>
               <div className="space-y-3 py-1">
@@ -364,26 +379,26 @@ export function GradebookGrid({ classId }: { classId: string }) {
                   <Input
                     value={newAssessment.title}
                     onChange={(e) => setNewAssessment({ ...newAssessment, title: e.target.value })}
-                    placeholder="مثلاً پرسش کلاسی فصل ۲"
+                    placeholder="مثلاً پرسش کلاسی فصل ۲ یا آزمون میان‌ترم"
                     className="h-9"
                   />
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1.5">
-                    <Label className="text-xs font-medium">نوع نمره</Label>
+                    <Label className="text-xs font-medium">نوع نمره‌دهی</Label>
                     <Select
                       value={newAssessment.evaluationType}
                       onValueChange={(v) => setNewAssessment({ ...newAssessment, evaluationType: v as any })}
                     >
                       <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="NUMERIC">عددی (۰-۲۰)</SelectItem>
-                        <SelectItem value="DESCRIPTIVE">توصیفی</SelectItem>
+                        <SelectItem value="NUMERIC">عددی (۰ تا ۲۰)</SelectItem>
+                        <SelectItem value="DESCRIPTIVE">توصیفی (کیفی)</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
                   <div className="space-y-1.5">
-                    <Label className="text-xs font-medium">تاریخ</Label>
+                    <Label className="text-xs font-medium">تاریخ برگزاری</Label>
                     <Input
                       type="date"
                       dir="ltr"
@@ -394,13 +409,20 @@ export function GradebookGrid({ classId }: { classId: string }) {
                   </div>
                 </div>
               </div>
-              <DialogFooter>
+              <DialogFooter className="gap-2">
                 <Button
                   onClick={createAssessment}
                   disabled={saving || !newAssessment.title}
-                  className="bg-emerald hover:bg-emerald-dark"
+                  className="bg-emerald hover:bg-emerald-dark gap-2 cursor-pointer"
                 >
-                  {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : "ایجاد"}
+                  {saving ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      در حال ایجاد...
+                    </>
+                  ) : (
+                    "ایجاد و ثبت ارزیابی"
+                  )}
                 </Button>
               </DialogFooter>
             </DialogContent>
@@ -500,9 +522,9 @@ export function GradebookGrid({ classId }: { classId: string }) {
                   <Button
                     variant={editValue === "absent" ? "destructive" : "outline"}
                     onClick={() => setEditValue(editValue === "absent" ? "" : "absent")}
-                    className="h-10"
+                    className="h-10 cursor-pointer text-xs font-medium"
                   >
-                    غایب
+                    {editValue === "absent" ? "ثبت‌شده به‌عنوان غایب" : "علامت‌گذاری غایب"}
                   </Button>
                 </div>
                 <div className="grid grid-cols-5 gap-1.5">
@@ -512,7 +534,7 @@ export function GradebookGrid({ classId }: { classId: string }) {
                       variant="outline"
                       size="sm"
                       onClick={() => setEditValue(n.toString())}
-                      className="tabular-nums"
+                      className="tabular-nums cursor-pointer hover:border-navy/50 hover:bg-navy/5"
                     >
                       {n.toLocaleString("fa-IR")}
                     </Button>
@@ -527,7 +549,7 @@ export function GradebookGrid({ classId }: { classId: string }) {
                     type="button"
                     onClick={() => setEditValue(key)}
                     className={cn(
-                      "p-3 rounded-lg border-2 transition-all text-sm font-medium",
+                      "p-3 rounded-lg border-2 transition-all text-sm font-medium cursor-pointer",
                       editValue === key ? cn(tint, "border-current") : "border-border hover:border-muted-foreground"
                     )}
                   >
@@ -537,14 +559,23 @@ export function GradebookGrid({ classId }: { classId: string }) {
               </div>
             )}
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setEditing(null)}>انصراف</Button>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setEditing(null)} className="cursor-pointer">
+              انصراف و بستن
+            </Button>
             <Button
               onClick={saveGrade}
               disabled={saving || !editValue}
-              className="bg-emerald hover:bg-emerald-dark"
+              className="bg-emerald hover:bg-emerald-dark gap-2 cursor-pointer"
             >
-              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : "ذخیره"}
+              {saving ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  در حال ذخیره...
+                </>
+              ) : (
+                "ذخیره نمره دانش‌آموز"
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -567,7 +598,9 @@ function GradeCellDisplay({
       <button
         type="button"
         onClick={onClick}
-        className="w-full h-9 rounded-md border border-dashed border-border hover:border-navy hover:bg-navy/5 text-muted-foreground/40 hover:text-navy text-xs transition"
+        aria-label="ثبت نمره برای این ارزیابی"
+        title="کلیک برای ثبت نمره"
+        className="w-full h-9 rounded-md border border-dashed border-border hover:border-navy hover:bg-navy/5 text-muted-foreground/40 hover:text-navy text-xs transition active:scale-95 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-navy/30"
       >
         —
       </button>
@@ -578,7 +611,9 @@ function GradeCellDisplay({
       <button
         type="button"
         onClick={onClick}
-        className="w-full h-9 rounded-md bg-destructive/10 text-destructive text-xs font-medium hover:bg-destructive/20 transition"
+        aria-label="وضعیت غایب - کلیک جهت ویرایش نمره"
+        title="غایب در ارزیابی (کلیک جهت ویرایش)"
+        className="w-full h-9 rounded-md bg-destructive/10 text-destructive text-xs font-medium hover:bg-destructive/20 transition active:scale-95 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-destructive/30"
       >
         غایب
       </button>
@@ -589,8 +624,10 @@ function GradeCellDisplay({
       <button
         type="button"
         onClick={onClick}
+        aria-label={`نمره عددی: ${grade.numericScore.toLocaleString("fa-IR")} - کلیک جهت ویرایش`}
+        title="کلیک برای ویرایش نمره"
         className={cn(
-          "w-full h-9 rounded-md text-sm font-bold tabular-nums transition",
+          "w-full h-9 rounded-md text-sm font-bold tabular-nums transition active:scale-95 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-navy/30",
           scoreTint(grade.numericScore)
         )}
       >
@@ -604,8 +641,10 @@ function GradeCellDisplay({
       <button
         type="button"
         onClick={onClick}
+        aria-label={`نمره توصیفی: ${info?.label ?? grade.descriptiveScore} - کلیک جهت ویرایش`}
+        title="کلیک برای ویرایش نمره"
         className={cn(
-          "w-full h-9 rounded-md text-[10px] font-medium transition",
+          "w-full h-9 rounded-md text-[10px] font-medium transition active:scale-95 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-navy/30",
           info?.tint ?? "bg-muted"
         )}
       >

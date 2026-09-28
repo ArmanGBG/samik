@@ -46,7 +46,9 @@ interface AbsenteeEntry {
   subjectTitle: string;
   teacherName: string;
   submittedAt: string;
-  status: "ABSENT" | "LATE";
+  status: "ABSENT" | "LATE" | "EXCUSED";
+  guardianPhone?: string;
+  classSessionId?: string;
   schoolId: string;
 }
 
@@ -76,6 +78,7 @@ type SSEEvent =
         absentees: Array<{
           studentId: string;
           studentName: string;
+          guardianPhone?: string;
           status: "ABSENT" | "LATE";
         }>;
       };
@@ -139,6 +142,8 @@ export function DeputyLiveDashboard() {
         }
       }
       setPendingClasses(active);
+    } catch (err) {
+      console.error("[LOAD_PENDING_CLASSES_ERROR]", err);
     } finally {
       setLoadingPending(false);
     }
@@ -173,6 +178,8 @@ export function DeputyLiveDashboard() {
               id: `${event.payload.classSessionId}-${a.studentId}-${i}`,
               studentId: a.studentId,
               studentName: a.studentName,
+              guardianPhone: a.guardianPhone,
+              classSessionId: event.payload.classSessionId,
               classroomName: event.payload.classroomName,
               subjectTitle: event.payload.subjectTitle,
               teacherName: event.payload.teacherName || "—",
@@ -194,6 +201,9 @@ export function DeputyLiveDashboard() {
         }
         if (event.type === "behavioral-point:created") {
           setBehavioral((prev) => [event.payload, ...prev].slice(0, 50));
+        }
+        if (event.type === "attendance:excused") {
+          setAbsentees((prev) => prev.filter((a) => a.studentId !== event.payload.studentId));
         }
       } catch {
         // ignore malformed events (e.g. heartbeat comments)
@@ -382,7 +392,18 @@ export function DeputyLiveDashboard() {
               ) : (
                 <div className="space-y-2 max-h-96 overflow-y-auto">
                   {absentees.map((a, i) => (
-                    <AbsenteeRow key={a.id} absentee={a} index={i} />
+                    <AbsenteeRow
+                      key={a.id}
+                      absentee={a}
+                      index={i}
+                      onExcuse={(excusedId) => {
+                        setAbsentees((prev) =>
+                          prev.map((item) =>
+                            item.id === excusedId ? { ...item, status: "EXCUSED" } : item
+                          )
+                        );
+                      }}
+                    />
                   ))}
                 </div>
               )}
@@ -454,18 +475,49 @@ export function DeputyLiveDashboard() {
 function AbsenteeRow({
   absentee,
   index,
+  onExcuse,
 }: {
   absentee: AbsenteeEntry;
   index: number;
+  onExcuse?: (id: string) => void;
 }) {
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [excusing, setExcusing] = useState(false);
+
+  const handleExcuse = async () => {
+    setExcusing(true);
+    try {
+      const res = await fetch("/api/v1/deputy/attendance/excuse", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          studentId: absentee.studentId,
+          classSessionId: absentee.classSessionId,
+        }),
+      });
+      const data = await res.json();
+      if (!data.ok) {
+        toast.error(data.error || "خطا در توجیه غیبت");
+        return;
+      }
+      toast.success("غیبت دانش‌آموز موجه شد و پیامک از کارتابل لغو گردید.");
+      setDrawerOpen(false);
+      onExcuse?.(absentee.id);
+    } catch {
+      toast.error("خطا در برقراری ارتباط با سرور");
+    } finally {
+      setExcusing(false);
+    }
+  };
 
   return (
     <Sheet open={drawerOpen} onOpenChange={setDrawerOpen}>
       <div
         className={cn(
           "stagger-item flex items-center gap-3 p-3 rounded-lg border",
-          absentee.status === "ABSENT"
+          absentee.status === "EXCUSED"
+            ? "border-info/20 bg-info/5"
+            : absentee.status === "ABSENT"
             ? "border-destructive/20 bg-destructive/5"
             : "border-warning/20 bg-warning/5"
         )}
@@ -474,7 +526,11 @@ function AbsenteeRow({
         <div
           className={cn(
             "h-2 w-2 rounded-full shrink-0",
-            absentee.status === "ABSENT" ? "bg-destructive" : "bg-warning"
+            absentee.status === "EXCUSED"
+              ? "bg-info"
+              : absentee.status === "ABSENT"
+              ? "bg-destructive"
+              : "bg-warning"
           )}
         />
         <div className="flex-1 min-w-0">
@@ -490,19 +546,26 @@ function AbsenteeRow({
           variant="outline"
           className={cn(
             "text-xs",
-            absentee.status === "ABSENT"
+            absentee.status === "EXCUSED"
+              ? "bg-info/10 text-info border-info/30"
+              : absentee.status === "ABSENT"
               ? "bg-destructive/10 text-destructive"
               : "bg-warning/10 text-warning"
           )}
         >
-          {absentee.status === "ABSENT" ? "غایب" : "تاخیر"}
+          {absentee.status === "EXCUSED"
+            ? "موجه"
+            : absentee.status === "ABSENT"
+            ? "غایب"
+            : "تاخیر"}
         </Badge>
         <SheetTrigger asChild>
           <Button
             variant="ghost"
             size="icon"
             className="h-8 w-8 text-info hover:text-info hover:bg-info/10 cursor-pointer"
-            aria-label="تماس با ولی"
+            aria-label={`مدیریت وضعیت و تماس با ولی ${absentee.studentName}`}
+            title={`مدیریت وضعیت و تماس با ولی ${absentee.studentName}`}
           >
             <Phone className="h-3.5 w-3.5" />
           </Button>
@@ -510,35 +573,74 @@ function AbsenteeRow({
       </div>
       <SheetContent side="right" className="w-80">
         <SheetHeader>
-          <SheetTitle className="text-navy">تماس با ولی</SheetTitle>
+          <SheetTitle className="text-navy">پیگیری وضعیت حضور و تماس با ولی</SheetTitle>
         </SheetHeader>
         <div className="p-4 space-y-3">
           <div>
-            <div className="text-xs text-muted-foreground">دانش‌آموز</div>
-            <div className="font-medium">{absentee.studentName}</div>
+            <div className="text-xs text-muted-foreground">نام دانش‌آموز</div>
+            <div className="font-semibold text-foreground text-sm mt-0.5">{absentee.studentName}</div>
           </div>
           <div>
-            <div className="text-xs text-muted-foreground">کلاس</div>
-            <div>{absentee.classroomName}</div>
+            <div className="text-xs text-muted-foreground">کلاس و درس</div>
+            <div className="text-sm font-medium mt-0.5">{absentee.classroomName} — {absentee.subjectTitle}</div>
           </div>
           <div>
-            <div className="text-xs text-muted-foreground">وضعیت</div>
+            <div className="text-xs text-muted-foreground">وضعیت فعلی در سامانه</div>
             <Badge
-              className={
-                absentee.status === "ABSENT"
+              className={cn(
+                "mt-1 font-medium",
+                absentee.status === "EXCUSED"
+                  ? "bg-info text-white"
+                  : absentee.status === "ABSENT"
                   ? "bg-destructive text-white"
                   : "bg-warning text-white"
-              }
+              )}
             >
-              {absentee.status === "ABSENT" ? "غایب" : "تاخیر"}
+              {absentee.status === "EXCUSED"
+                ? "غیبت موجه"
+                : absentee.status === "ABSENT"
+                ? "غایب غیرموجه"
+                : "تاخیر ورود"}
             </Badge>
           </div>
-          <Button className="w-full bg-emerald hover:bg-emerald-dark gap-2 cursor-pointer">
-            <Phone className="h-4 w-4" />
-            تماس با ولی
-          </Button>
-          <Button variant="outline" className="w-full cursor-pointer">
-            توجیه غیبت (EXCUSED)
+          {absentee.guardianPhone ? (
+            <Button
+              asChild
+              className="w-full bg-emerald hover:bg-emerald-dark gap-2 cursor-pointer shadow-sm"
+            >
+              <a href={`tel:${absentee.guardianPhone}`}>
+                <Phone className="h-4 w-4" />
+                تماس تلفنی با ولی ({absentee.guardianPhone})
+              </a>
+            </Button>
+          ) : (
+            <Button
+              className="w-full bg-muted text-muted-foreground hover:bg-muted/80 gap-2 cursor-pointer"
+              onClick={() => toast.info("شماره تماس ولی در پرونده این دانش‌آموز ثبت نشده است.")}
+            >
+              <Phone className="h-4 w-4" />
+              شماره ولی ثبت نشده است
+            </Button>
+          )}
+          <Button
+            variant="outline"
+            className="w-full cursor-pointer hover:bg-amber-50 hover:text-amber-800 hover:border-amber-300 gap-2"
+            disabled={excusing || absentee.status === "EXCUSED"}
+            onClick={handleExcuse}
+          >
+            {excusing ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                در حال ثبت موجه‌سازی...
+              </>
+            ) : absentee.status === "EXCUSED" ? (
+              <>
+                <CheckCircle2 className="h-4 w-4 text-emerald" />
+                غیبت قبلاً موجه شده است
+              </>
+            ) : (
+              "تأیید و موجه‌سازی غیبت دانش‌آموز"
+            )}
           </Button>
         </div>
       </SheetContent>

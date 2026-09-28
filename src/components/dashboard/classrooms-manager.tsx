@@ -111,6 +111,8 @@ export function ClassRoomsManager() {
       const d = await safeJsonResponse(r, "خطا در دریافت لیست کلاس‌ها.");
       if (d.ok) setRooms(d.classrooms as ClassRoom[]);
       else toast.error(d.error!);
+    } catch {
+      toast.error("خطا در برقراری ارتباط با سرور.");
     } finally {
       setLoading(false);
     }
@@ -196,6 +198,8 @@ export function ClassRoomsManager() {
       toast.success(`کلاس ${form.gradeLevel} ${form.name}${majorLabel} ثبت شد.`);
       setForm({ gradeLevel: "", major: "", name: "" });
       load();
+    } catch {
+      toast.error("خطا در برقراری ارتباط با سرور.");
     } finally {
       setSubmitting(false);
     }
@@ -243,6 +247,8 @@ export function ClassRoomsManager() {
       toast.success("کلاس ویرایش شد.");
       setEditing(null);
       load();
+    } catch {
+      toast.error("خطا در برقراری ارتباط با سرور.");
     } finally {
       setEditSubmitting(false);
     }
@@ -251,16 +257,20 @@ export function ClassRoomsManager() {
   async function onDelete(id: string, label: string) {
     if (!confirm(`حذف کلاس «${label}»؟ این عملیات نرم است و سوابق حفظ می‌شوند.`))
       return;
-    const r = await fetch(`/api/v1/principal/classrooms?id=${id}`, {
-      method: "DELETE",
-    });
-    const d = await safeJsonResponse(r, "حذف ناموفق بود.");
-    if (!d.ok) {
-      toast.error(d.error!);
-      return;
+    try {
+      const r = await fetch(`/api/v1/principal/classrooms?id=${id}`, {
+        method: "DELETE",
+      });
+      const d = await safeJsonResponse(r, "حذف ناموفق بود.");
+      if (!d.ok) {
+        toast.error(d.error!);
+        return;
+      }
+      toast.success("کلاس حذف شد.");
+      load();
+    } catch {
+      toast.error("خطا در برقراری ارتباط با سرور.");
     }
-    toast.success("کلاس حذف شد.");
-    load();
   }
 
   const showMajorInForm = gradeHasMajor(form.gradeLevel);
@@ -343,14 +353,19 @@ export function ClassRoomsManager() {
               <Button
                 type="submit"
                 disabled={submitting || !form.gradeLevel || !form.name}
-                className="w-full bg-emerald hover:bg-emerald-dark h-9 gap-2"
+                className="w-full bg-emerald hover:bg-emerald-dark h-9 gap-2 cursor-pointer font-medium"
               >
                 {submitting ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    در حال ایجاد کلاس...
+                  </>
                 ) : (
-                  <Plus className="h-4 w-4" />
+                  <>
+                    <Plus className="h-4 w-4" />
+                    ثبت و ایجاد کلاس جدید
+                  </>
                 )}
-                ثبت کلاس
               </Button>
             </div>
           </CardContent>
@@ -485,12 +500,13 @@ export function ClassRoomsManager() {
                                   variant="ghost"
                                   size="sm"
                                   onClick={() => openEdit(r)}
-                                  className="text-info hover:text-info hover:bg-info/10 h-8 w-8 p-0"
+                                  className="text-info hover:text-info hover:bg-info/10 h-8 w-8 p-0 cursor-pointer"
+                                  aria-label={`ویرایش کلاس ${r.gradeLevel} ${r.name}`}
                                 >
                                   <Pencil className="h-4 w-4" />
                                 </Button>
                               </TooltipTrigger>
-                              <TooltipContent>ویرایش</TooltipContent>
+                              <TooltipContent>ویرایش مشخصات کلاس</TooltipContent>
                             </Tooltip>
                           </TooltipProvider>
                           <TooltipProvider>
@@ -502,12 +518,13 @@ export function ClassRoomsManager() {
                                   onClick={() =>
                                     onDelete(r.id, `${r.gradeLevel} ${r.name}`)
                                   }
-                                  className="text-destructive hover:text-destructive hover:bg-destructive/10 h-8 w-8 p-0"
+                                  className="text-destructive hover:text-destructive hover:bg-destructive/10 h-8 w-8 p-0 cursor-pointer"
+                                  aria-label={`حذف کلاس ${r.gradeLevel} ${r.name}`}
                                 >
                                   <Trash2 className="h-4 w-4" />
                                 </Button>
                               </TooltipTrigger>
-                              <TooltipContent>حذف</TooltipContent>
+                              <TooltipContent>حذف و بایگانی کلاس</TooltipContent>
                             </Tooltip>
                           </TooltipProvider>
                         </div>
@@ -525,7 +542,7 @@ export function ClassRoomsManager() {
       <Dialog open={!!editing} onOpenChange={(o) => !o && setEditing(null)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle className="text-navy">ویرایش کلاس</DialogTitle>
+            <DialogTitle className="text-navy">ویرایش مشخصات کلاس</DialogTitle>
           </DialogHeader>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 py-2">
             <div className="space-y-1.5">
@@ -577,17 +594,23 @@ export function ClassRoomsManager() {
               />
             </div>
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setEditing(null)}>
-              انصراف
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setEditing(null)} className="cursor-pointer">
+              انصراف و بستن
             </Button>
             <Button
               onClick={saveEdit}
               disabled={editSubmitting || !editForm.gradeLevel || !editForm.name}
-              className="bg-emerald hover:bg-emerald-dark gap-2"
+              className="bg-emerald hover:bg-emerald-dark gap-2 cursor-pointer"
             >
-              {editSubmitting && <Loader2 className="h-4 w-4 animate-spin" />}
-              ذخیره
+              {editSubmitting ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  در حال ذخیره...
+                </>
+              ) : (
+                "ذخیره تغییرات کلاس"
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>

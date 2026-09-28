@@ -12,7 +12,7 @@ const QuerySchema = z.object({
    *   "The client MUST send the current timestamp + timezone."
    * We accept either the client's "now" or omit and use server time.
    */
-  now: z.string().datetime().optional(),
+  now: z.string().datetime().nullable().optional(),
 });
 
 /**
@@ -42,7 +42,8 @@ export async function GET(req: NextRequest) {
     const nowParam = url.searchParams.get("now");
     let now: Date;
     try {
-      now = nowParam ? new Date(QuerySchema.parse({ now: nowParam }).now) : new Date();
+      const parsed = QuerySchema.parse({ now: nowParam || undefined });
+      now = parsed.now ? new Date(parsed.now) : new Date();
     } catch {
       return NextResponse.json(
         { ok: false, error: "پارامتر now باید ISO datetime معتبر باشد." },
@@ -54,21 +55,36 @@ export async function GET(req: NextRequest) {
     const schoolId = ctx.schoolId;
 
     // Get the school's termStartDate for week-parity calculation
-    const school = await db.school.findFirst({
-      where: { id: schoolId },
-      select: { id: true, name: true, termStartDate: true, subdomain: true },
-    });
-    if (!school) {
-      return NextResponse.json({ ok: false, error: "مدرسه یافت نشد." }, { status: 404 });
+    const todaySamikDay = currentSamikDayOfWeek(now);
+    let school, todaysSlots;
+    try {
+      school = await db.school.findFirst({
+        where: { id: schoolId },
+        select: { id: true, name: true, termStartDate: true, subdomain: true },
+      });
+      
+      if (!school) {
+        return NextResponse.json({ ok: false, error: "مدرسه یافت نشد." }, { status: 404 });
+      }
+
+      todaysSlots = await db.timetableSlot.findMany({
+        where: {
+          teacherUserId,
+          dayOfWeek: todaySamikDay,
+        },
+        include: {
+          classRoom: { select: { id: true, name: true, gradeLevel: true } },
+          subject: { select: { id: true, title: true } },
+          bellSchedule: { select: { id: true, title: true, startTime: true, endTime: true } },
+        },
+        orderBy: { bellSchedule: { startTime: "asc" } },
+      });
+    } catch (err) {
+      console.error("[CURRENT_SESSION_DB_ERROR]", err);
+      return NextResponse.json({ ok: false, error: "خطای سرور در بارگذاری تقویم کلاسی." }, { status: 500 });
     }
 
     const parityResult = calculateWeekParity(school.termStartDate, now);
-    const todaySamikDay = currentSamikDayOfWeek(now);
-
-    // "HH:mm" of "now" in server local time. For dev (Asia/Tehran) we just
-    // use the server's local time — in prod the server runs in UTC and
-    // we'd convert using the school's timezone. For now, the architect
-    // can run the dev server in any timezone and the matching still works.
     const nowHHmm =
       String(now.getHours()).padStart(2, "0") +
       ":" +
@@ -78,24 +94,6 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ ok: false, error: "خطای محاسبه زمان." }, { status: 500 });
     }
 
-    // Load all of this teacher's slots for today. Tenant filter is
-    // active — only the current school's slots are returned. That's
-    // correct per Section 5 ("limited to classes/sessions assigned to
-    // them in THIS school"). The teacher's other-school slots are not
-    // shown here.
-    const todaysSlots = await db.timetableSlot.findMany({
-      where: {
-        teacherUserId,
-        dayOfWeek: todaySamikDay,
-      },
-      include: {
-        classRoom: { select: { id: true, name: true, gradeLevel: true } },
-        subject: { select: { id: true, title: true } },
-        bellSchedule: { select: { id: true, title: true, startTime: true, endTime: true } },
-      },
-      orderBy: { bellSchedule: { startTime: "asc" } },
-    });
-
     // Filter by weekType matching current parity
     const parityMatched = todaysSlots.filter((s) => weekTypeMatches(s.weekType, parityResult));
 
@@ -104,7 +102,7 @@ export async function GET(req: NextRequest) {
     // roll-call early per Section 5).
     const TOLERANCE_MINUTES = 15;
     const nowMinutes = now.getHours() * 60 + now.getMinutes();
-    let activeSlot = null;
+    let activeSlot: (typeof parityMatched)[number] | null = null;
     for (const slot of parityMatched) {
       if (!HH_MM_REGEX.test(slot.bellSchedule.startTime) || !HH_MM_REGEX.test(slot.bellSchedule.endTime)) {
         continue;

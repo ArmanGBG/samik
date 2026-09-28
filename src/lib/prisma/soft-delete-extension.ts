@@ -38,7 +38,7 @@ function hasSoftDelete(model: string | undefined): model is string {
  */
 export const INCLUDE_DELETED_SYMBOL = "__includeDeleted";
 
-export const softDeleteExtension = Prisma.defineExtension((client: PrismaClient) => {
+export const softDeleteExtension = Prisma.defineExtension((client: any) => {
   return client.$extends({
     name: "samik-soft-delete",
     query: {
@@ -81,7 +81,7 @@ export const softDeleteExtension = Prisma.defineExtension((client: PrismaClient)
             const includeDeleted = w[INCLUDE_DELETED_SYMBOL] === true;
             if (!includeDeleted) w.deletedAt = null;
             delete w[INCLUDE_DELETED_SYMBOL];
-            args.where = w;
+            args.where = w as any;
           }
           return query(args);
         },
@@ -91,7 +91,7 @@ export const softDeleteExtension = Prisma.defineExtension((client: PrismaClient)
             const includeDeleted = w[INCLUDE_DELETED_SYMBOL] === true;
             if (!includeDeleted) w.deletedAt = null;
             delete w[INCLUDE_DELETED_SYMBOL];
-            args.where = w;
+            args.where = w as any;
           }
           return query(args);
         },

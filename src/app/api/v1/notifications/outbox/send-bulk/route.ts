@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { withTenantContext } from "@/lib/middleware-helpers/tenant-guard";
 import { db } from "@/lib/db";
-import { eventBus } from "@/lib/realtime/event-bus";
+import { eventBus, emitNotificationUpdated } from "@/lib/realtime/event-bus";
 import { getSmsProvider } from "@/lib/sms/provider";
 
 const SendBulkBody = z.object({
@@ -97,6 +97,12 @@ export async function POST(req: NextRequest) {
     // since the schema only has DRAFT/SENT/FAILED/DISCARDED, we'll just
     // process them. To prevent double-sending if the deputy clicks again,
     // we delete them from the DRAFT pool by updating to SENT as we go.
+
+    emitNotificationUpdated({
+      schoolId,
+      action: "BULK_SENT",
+      count: drafts.length,
+    });
 
     // === STEP 1: Return 202 Accepted IMMEDIATELY ===
     const response = NextResponse.json(

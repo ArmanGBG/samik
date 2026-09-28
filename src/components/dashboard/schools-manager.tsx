@@ -82,6 +82,9 @@ export function SchoolsManager() {
       const r = await fetch("/api/v1/super-admin/schools");
       const d = await r.json();
       if (d.ok) setSchools(d.schools);
+    } catch (err) {
+      console.error("[LOAD_SCHOOLS_ERROR]", err);
+      toast.error("خطا در دریافت لیست مدارس.");
     } finally {
       setLoading(false);
     }
@@ -115,8 +118,33 @@ export function SchoolsManager() {
         principalLastName: "",
       });
       load();
+    } catch {
+      toast.error("خطا در برقراری ارتباط با سرور.");
     } finally {
       setSubmitting(false);
+    }
+  }
+
+  async function handleDeleteSchool(id: string, name: string) {
+    if (
+      !confirm(
+        `غیرفعال‌سازی (تعلیق) مدرسهٔ «${name}»؟ کلیه اطلاعات و سوابق تحصیلی مدرسه در دیتابیس محفوظ می‌ماند.`
+      )
+    )
+      return;
+    try {
+      const r = await fetch(`/api/v1/super-admin/schools?id=${id}`, {
+        method: "DELETE",
+      });
+      const d = await r.json();
+      if (!d.ok) {
+        toast.error(d.error ?? "خطا در غیرفعال‌سازی مدرسه.");
+        return;
+      }
+      toast.success(`مدرسهٔ «${name}» با موفقیت تعلیق شد.`);
+      load();
+    } catch {
+      toast.error("خطا در برقراری ارتباط با سرور.");
     }
   }
 
@@ -318,15 +346,18 @@ export function SchoolsManager() {
             <Button
               type="submit"
               disabled={submitting}
-              className="bg-emerald hover:bg-emerald-dark cursor-pointer"
+              className="bg-emerald hover:bg-emerald-dark cursor-pointer gap-2 font-medium"
             >
               {submitting ? (
                 <>
-                  <Loader2 className="ml-2 h-4 w-4 animate-spin" />
-                  در حال ثبت...
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  در حال ثبت و راه‌اندازی مدرسه...
                 </>
               ) : (
-                "ثبت مدرسه"
+                <>
+                  <Plus className="h-4 w-4" />
+                  ثبت و راه‌اندازی مدرسه جدید
+                </>
               )}
             </Button>
           </CardFooter>
@@ -458,23 +489,14 @@ export function SchoolsManager() {
                                   variant="ghost"
                                   size="sm"
                                   className="text-destructive hover:text-destructive hover:bg-destructive/10 cursor-pointer h-8 w-8 p-0"
-                                  onClick={() => {
-                                    if (
-                                      !confirm(
-                                        `حذف مدرسهٔ «${s.name}»؟ این عملیات نیازمند تأیید مدیر سامانه است.`
-                                      )
-                                    )
-                                      return;
-                                    toast.info(
-                                      "حذف مدرسه در این نسخه از طریق پشتیبانی انجام می‌شود."
-                                    );
-                                  }}
+                                  onClick={() => handleDeleteSchool(s.id, s.name)}
+                                  aria-label={`تعلیق و غیرفعال‌سازی مدرسه ${s.name}`}
                                 >
                                   <Trash2 className="h-4 w-4" />
                                 </Button>
                               </TooltipTrigger>
                               <TooltipContent side="top">
-                                حذف مدرسه
+                                تعلیق و غیرفعال‌سازی مدرسه
                               </TooltipContent>
                             </Tooltip>
                           </TooltipProvider>

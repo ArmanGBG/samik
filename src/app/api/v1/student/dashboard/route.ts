@@ -65,7 +65,7 @@ export async function GET(req: NextRequest) {
     // (either guardian phone matches, or it's the one in their token)
     const user = await db.user.findUnique({
       where: { id: userId },
-      select: { phoneNumber: true },
+      select: { id: true, phoneNumber: true },
     });
     if (!user) {
       return NextResponse.json({ ok: false, error: "کاربر یافت نشد." }, { status: 404 });
@@ -83,11 +83,13 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ ok: false, error: "عضویت یافت نشد." }, { status: 404 });
     }
 
-    // Authorization: the user's phone must match the guardian phone
-    if (
-      enrollment.guardianPhone1 !== user.phoneNumber &&
-      enrollment.guardianPhone2 !== user.phoneNumber
-    ) {
+    // Authorization: the user must be the student themselves, or the guardian
+    const isStudentSelf = enrollment.studentUserId === user.id;
+    const isGuardian =
+      enrollment.guardianPhone1 === user.phoneNumber ||
+      enrollment.guardianPhone2 === user.phoneNumber;
+
+    if (!isStudentSelf && !isGuardian) {
       return NextResponse.json(
         { ok: false, error: "شما به این عضویت دسترسی ندارید." },
         { status: 403 }

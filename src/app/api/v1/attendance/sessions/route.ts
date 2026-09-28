@@ -66,18 +66,19 @@ export async function POST(req: NextRequest) {
         };
       }
 
-      // Validate the timetable slot exists + belongs to this teacher
-      const slot = await db.timetableSlot.findFirst({
-        where: {
-          id: body.timetableSlotId,
-          teacherUserId: ctx.userId,
-        },
-        include: {
-          classRoom: { select: { id: true, name: true, gradeLevel: true } },
-          subject: { select: { id: true, title: true } },
-          bellSchedule: { select: { id: true, title: true, startTime: true, endTime: true } },
-        },
-      });
+      try {
+        // Validate the timetable slot exists + belongs to this teacher
+        const slot = await db.timetableSlot.findFirst({
+          where: {
+            id: body.timetableSlotId,
+            teacherUserId: ctx.userId,
+          },
+          include: {
+            classRoom: { select: { id: true, name: true, gradeLevel: true } },
+            subject: { select: { id: true, title: true } },
+            bellSchedule: { select: { id: true, title: true, startTime: true, endTime: true } },
+          },
+        });
       if (!slot) {
         return {
           status: 404,
@@ -271,6 +272,7 @@ export async function POST(req: NextRequest) {
         .map((r) => ({
           studentId: r.studentUserId,
           studentName: r.studentName,
+          guardianPhone: r.guardianPhone ?? undefined,
           status: r.status as "ABSENT" | "LATE",
         }));
 
@@ -286,25 +288,38 @@ export async function POST(req: NextRequest) {
         absentees,
       });
 
-      return {
-        status: 201,
-        body: {
-          ok: true,
-          session: {
-            id: result.session.id,
-            status: result.session.status,
-            submittedAt: result.session.submittedAt,
+        return {
+          status: 201,
+          body: {
+            ok: true,
+            session: {
+              id: result.session.id,
+              status: result.session.status,
+              submittedAt: result.session.submittedAt,
+            },
+            stats: {
+              total: recordsToCreate.length,
+              present: recordsToCreate.filter((r) => r.status === "PRESENT").length,
+              absent: recordsToCreate.filter((r) => r.status === "ABSENT").length,
+              late: recordsToCreate.filter((r) => r.status === "LATE").length,
+              excused: recordsToCreate.filter((r) => r.status === "EXCUSED").length,
+              notificationDrafts: result.draftCount,
+            },
           },
-          stats: {
-            total: recordsToCreate.length,
-            present: recordsToCreate.filter((r) => r.status === "PRESENT").length,
-            absent: recordsToCreate.filter((r) => r.status === "ABSENT").length,
-            late: recordsToCreate.filter((r) => r.status === "LATE").length,
-            excused: recordsToCreate.filter((r) => r.status === "EXCUSED").length,
-            notificationDrafts: result.draftCount,
-          },
-        },
-      };
+        };
+      } catch (err) {
+        console.error("[ATTENDANCE_SESSION_ERROR]", err);
+        return {
+          status: 500,
+          body: { ok: false, error: "خطا در پردازش و ذخیره حضور و غیاب." },
+        };
+      }
     });
-  }).then(({ status, body }) => NextResponse.json(body, { status }));
+  }).then((res: any) => {
+    if (res instanceof NextResponse) return res;
+    if (res && typeof res.status === "number" && "body" in res) {
+      return NextResponse.json(res.body, { status: res.status });
+    }
+    return NextResponse.json(res);
+  });
 }

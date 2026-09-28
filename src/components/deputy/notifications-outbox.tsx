@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { useRealtimeEvent } from "@/lib/realtime/realtime-context";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
@@ -70,6 +71,8 @@ export function NotificationsOutbox() {
       const r = await fetch("/api/v1/notifications/outbox?status=DRAFT");
       const d = await r.json();
       if (d.ok) setItems(d.outbox);
+    } catch (err) {
+      console.error("[LOAD_OUTBOX_ERROR]", err);
     } finally {
       setLoading(false);
     }
@@ -77,13 +80,16 @@ export function NotificationsOutbox() {
 
   useEffect(() => {
     load();
-    // Poll every 5s for real-time updates (SSE could also be used here
-    // — the send-bulk endpoint emits `notification:sent` events that
-    // the live dashboard already consumes. For the outbox page, polling
-    // is simpler and adequate since the deputy is actively viewing it.)
-    const id = setInterval(load, 5000);
-    return () => clearInterval(id);
   }, [load]);
+
+  // Real-time synchronization: automatically re-fetch whenever new attendance
+  // creates SMS drafts, or when an absence is excused and draft is discarded!
+  useRealtimeEvent(
+    ["attendance:submitted", "attendance:excused", "notification:updated"],
+    () => {
+      void load();
+    }
+  );
 
   const drafts = items.filter((i) => i.status === "DRAFT");
 
@@ -132,14 +138,18 @@ export function NotificationsOutbox() {
 
   async function discard(id: string, name: string) {
     if (!confirm(`حذف پیش‌نویس پیامک برای ${name}؟`)) return;
-    const r = await fetch(`/api/v1/notifications/outbox/${id}`, { method: "DELETE" });
-    const d = await r.json();
-    if (!d.ok) {
-      toast.error(d.error ?? "حذف ناموفق بود.");
-      return;
+    try {
+      const r = await fetch(`/api/v1/notifications/outbox/${id}`, { method: "DELETE" });
+      const d = await r.json();
+      if (!d.ok) {
+        toast.error(d.error ?? "حذف ناموفق بود.");
+        return;
+      }
+      toast.success("پیش‌نویس حذف شد.");
+      load();
+    } catch {
+      toast.error("خطا در برقراری ارتباط با سرور.");
     }
-    toast.success("پیش‌نویس حذف شد.");
-    load();
   }
 
   async function sendBulk() {
@@ -163,6 +173,8 @@ export function NotificationsOutbox() {
       );
       setSelected(new Set());
       // The polling will pick up the SENT status as the background job completes
+    } catch {
+      toast.error("خطا در ارسال پیامک‌ها به سرور.");
     } finally {
       setSending(false);
     }
@@ -177,17 +189,21 @@ export function NotificationsOutbox() {
     <Button
       onClick={sendBulk}
       disabled={sending || selected.size === 0}
-      className="bg-emerald hover:bg-emerald-dark shadow-lg shadow-emerald/20"
+      className="bg-emerald hover:bg-emerald-dark shadow-md shadow-emerald/20 cursor-pointer gap-2"
     >
       {sending ? (
-        <Loader2 className="h-4 w-4 animate-spin" />
+        <>
+          <Loader2 className="h-4 w-4 animate-spin" />
+          در حال ارسال پیامک‌ها...
+        </>
       ) : (
-        <Send className="h-4 w-4" />
+        <>
+          <Send className="h-4 w-4" />
+          {selected.size > 0
+            ? `تأیید و ارسال پیامک‌ها به اولیا (${selected.size.toLocaleString("fa-IR")})`
+            : "ارسال پیامک‌ها به اولیا (موردی انتخاب نشده)"}
+        </>
       )}
-      ارسال گروهی
-      <span className="tabular-nums">
-        ({selected.size > 0 ? selected.size.toLocaleString("fa-IR") : "۰"})
-      </span>
     </Button>
   );
 
@@ -243,8 +259,10 @@ export function NotificationsOutbox() {
                 </span>
                 {draftCount > 0 && (
                   <button
+                    type="button"
                     onClick={selectAll}
-                    className="text-xs text-navy hover:text-navy-dark hover:underline flex items-center gap-1.5 cursor-pointer transition-colors"
+                    aria-label={allSelected ? "لغو انتخاب همه پیامک‌ها" : "انتخاب همه پیامک‌های در انتظار ارسال"}
+                    className="text-xs text-navy hover:text-navy-dark hover:underline flex items-center gap-1.5 cursor-pointer transition-colors active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-navy/30 rounded px-1"
                   >
                     {allSelected ? (
                       <>
@@ -336,13 +354,13 @@ export function NotificationsOutbox() {
                                 size="icon"
                                 onClick={() => handleEdit(item)}
                                 className="h-8 w-8 text-info hover:text-info hover:bg-info/10 cursor-pointer"
-                                aria-label="ویرایش متن پیامک"
+                                aria-label={`ویرایش متن پیامک برای ${item.studentName}`}
                               >
                                 <Edit3 className="h-4 w-4" />
                               </Button>
                             </TooltipTrigger>
                             <TooltipContent side="top">
-                              <span>ویرایش متن</span>
+                              <span>ویرایش متن پیامک</span>
                             </TooltipContent>
                           </Tooltip>
                         </TooltipProvider>
@@ -354,13 +372,13 @@ export function NotificationsOutbox() {
                                 size="icon"
                                 onClick={() => discard(item.id, item.studentName)}
                                 className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10 cursor-pointer"
-                                aria-label="حذف پیش‌نویس"
+                                aria-label={`حذف پیش‌نویس پیامک ${item.studentName}`}
                               >
                                 <Trash2 className="h-4 w-4" />
                               </Button>
                             </TooltipTrigger>
                             <TooltipContent side="top">
-                              <span>حذف پیش‌نویس</span>
+                              <span>حذف این پیش‌نویس</span>
                             </TooltipContent>
                           </Tooltip>
                         </TooltipProvider>
@@ -378,11 +396,11 @@ export function NotificationsOutbox() {
       <Dialog open={!!editing} onOpenChange={(o) => !o && setEditing(null)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle className="text-navy">ویرایش متن پیامک</DialogTitle>
+            <DialogTitle className="text-navy">ویرایش متن پیامک ارسالی</DialogTitle>
           </DialogHeader>
           <div className="space-y-3 py-2">
             <div>
-              <Label className="text-xs text-muted-foreground">گیرنده</Label>
+              <Label className="text-xs text-muted-foreground">دانش‌آموز و شماره دریافت‌کننده</Label>
               <p className="text-sm font-medium mt-0.5">
                 {editing?.studentName} •{" "}
                 <span dir="ltr" className="tabular-nums font-mono">
@@ -391,7 +409,7 @@ export function NotificationsOutbox() {
               </p>
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs font-medium">متن پیامک</Label>
+              <Label className="text-xs font-medium">متن پیامک ارسالی به ولی</Label>
               <Textarea
                 autoFocus
                 value={editText}
@@ -401,24 +419,24 @@ export function NotificationsOutbox() {
                 className="resize-none tabular-nums"
               />
               <p className="text-xs text-muted-foreground text-left tabular-nums">
-                {editText.length.toLocaleString("fa-IR")} / ۵۰۰
+                {editText.length.toLocaleString("fa-IR")} / ۵۰۰ نویسه
               </p>
             </div>
           </div>
-          <DialogFooter>
+          <DialogFooter className="gap-2">
             <Button
               variant="outline"
               onClick={() => setEditing(null)}
               className="cursor-pointer"
             >
-              انصراف
+              انصراف و بستن
             </Button>
             <Button
               onClick={saveEdit}
               disabled={!editText.trim()}
-              className="bg-emerald hover:bg-emerald-dark cursor-pointer"
+              className="bg-emerald hover:bg-emerald-dark cursor-pointer gap-2"
             >
-              ذخیره
+              ذخیره تغییرات متن
             </Button>
           </DialogFooter>
         </DialogContent>

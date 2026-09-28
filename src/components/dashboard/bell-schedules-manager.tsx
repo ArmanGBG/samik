@@ -77,6 +77,9 @@ export function BellSchedulesManager() {
       const r = await fetch("/api/v1/principal/bell-schedules");
       const d = await r.json();
       if (d.ok) setBells(d.bellSchedules);
+    } catch (err) {
+      console.error("[LOAD_BELL_SCHEDULES_ERROR]", err);
+      toast.error("خطا در بارگذاری لیست زنگ‌ها.");
     } finally {
       setLoading(false);
     }
@@ -103,6 +106,8 @@ export function BellSchedulesManager() {
       toast.success(`زنگ «${form.title}» ثبت شد.`);
       setForm({ title: "", startTime: "07:30", endTime: "09:00" });
       load();
+    } catch {
+      toast.error("خطا در برقراری ارتباط با سرور.");
     } finally {
       setSubmitting(false);
     }
@@ -110,16 +115,20 @@ export function BellSchedulesManager() {
 
   async function onDelete(id: string, title: string) {
     if (!confirm(`حذف زنگ «${title}»؟`)) return;
-    const r = await fetch(`/api/v1/principal/bell-schedules?id=${id}`, {
-      method: "DELETE",
-    });
-    const d = await r.json();
-    if (!d.ok) {
-      toast.error(d.error ?? "حذف ناموفق بود.");
-      return;
+    try {
+      const r = await fetch(`/api/v1/principal/bell-schedules?id=${id}`, {
+        method: "DELETE",
+      });
+      const d = await r.json();
+      if (!d.ok) {
+        toast.error(d.error ?? "حذف ناموفق بود.");
+        return;
+      }
+      toast.success("زنگ حذف شد.");
+      load();
+    } catch {
+      toast.error("خطا در برقراری ارتباط با سرور.");
     }
-    toast.success("زنگ حذف شد.");
-    load();
   }
 
   function toggleSort(key: SortKey) {
@@ -236,15 +245,18 @@ export function BellSchedulesManager() {
             <Button
               type="submit"
               disabled={submitting || !form.title}
-              className="bg-emerald hover:bg-emerald-dark cursor-pointer"
+              className="bg-emerald hover:bg-emerald-dark cursor-pointer gap-2"
             >
               {submitting ? (
                 <>
-                  <Loader2 className="ml-2 h-4 w-4 animate-spin" />
-                  در حال ثبت...
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  در حال ثبت زنگ جدید...
                 </>
               ) : (
-                "ثبت زنگ"
+                <>
+                  <Plus className="h-4 w-4" />
+                  ثبت و تعریف زنگ جدید
+                </>
               )}
             </Button>
           </CardFooter>
@@ -361,14 +373,15 @@ export function BellSchedulesManager() {
                                     onClick={() => onDelete(b.id, b.title)}
                                     disabled={b.slotCount > 0}
                                     className="text-destructive hover:text-destructive hover:bg-destructive/10 cursor-pointer h-8 w-8 p-0 disabled:opacity-40 disabled:cursor-not-allowed"
+                                    aria-label={`حذف زنگ ${b.title}`}
                                   >
                                     <Trash2 className="h-4 w-4" />
                                   </Button>
                                 </TooltipTrigger>
                                 <TooltipContent side="top">
                                   {b.slotCount > 0
-                                    ? "این زنگ در برنامهٔ هفتگی استفاده شده است."
-                                    : "حذف زنگ"}
+                                    ? "این زنگ در برنامهٔ هفتگی استفاده شده و قابل حذف نیست."
+                                    : `حذف زنگ «${b.title}»`}
                                 </TooltipContent>
                               </Tooltip>
                             </TooltipProvider>

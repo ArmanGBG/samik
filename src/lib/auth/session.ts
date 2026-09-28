@@ -20,6 +20,7 @@ export interface ProfileEntry {
   studentEnrollmentId?: string;
   /** Display label for the switcher (e.g. "ولیِ علی — مدرسه الف"). */
   label: string;
+  status?: "ACTIVE" | "PENDING_CONFIRMATION" | "ARCHIVED";
 }
 
 export async function buildUserProfiles(userId: string): Promise<ProfileEntry[]> {
@@ -68,19 +69,27 @@ export async function buildUserProfiles(userId: string): Promise<ProfileEntry[]>
     if (user) {
       const enrollments = await db.schoolEnrollment.findMany({
         where: {
-          OR: [{ guardianPhone1: user.phoneNumber }, { guardianPhone2: user.phoneNumber }],
+          OR: [
+            { guardianPhone1: user.phoneNumber },
+            { guardianPhone2: user.phoneNumber },
+            { studentUserId: user.id },
+          ],
           status: { in: ["ACTIVE", "PENDING_CONFIRMATION"] },
         },
         include: { school: true, student: true },
       });
       for (const en of enrollments) {
+        const isSelf = en.studentUserId === user.id;
         profiles.push({
           schoolId: en.schoolId,
           schoolName: en.school.name,
           schoolSubdomain: en.school.subdomain,
           role: "STUDENT",
           studentEnrollmentId: en.id,
-          label: `دانش‌آموز/ولی ${en.student.firstName} ${en.student.lastName} — ${en.school.name}`,
+          label: isSelf
+            ? `دانش‌آموز ${en.student.firstName} ${en.student.lastName} — ${en.school.name}`
+            : `ولیِ ${en.student.firstName} ${en.student.lastName} — ${en.school.name}`,
+          status: en.status as "ACTIVE" | "PENDING_CONFIRMATION" | "ARCHIVED",
         });
       }
     }

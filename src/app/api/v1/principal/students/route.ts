@@ -88,13 +88,13 @@ export async function GET(req: NextRequest) {
  * duplicate enrollments (same student already enrolled in this school).
  */
 export async function POST(req: NextRequest) {
-  return withTenantContext(req, ["PRINCIPAL", "DEPUTY"], async () => {
+  return withTenantContext(req, ["PRINCIPAL", "DEPUTY"], async (ctx) => {
     let body: z.infer<typeof CreateBody>;
     try {
       body = CreateBody.parse(await req.json());
-    } catch (e) {
+    } catch (e: any) {
       return NextResponse.json(
-        { ok: false, error: (e as z.ZodError).errors?.[0]?.message ?? "ورودی نامعتبر" },
+        { ok: false, error: e?.issues?.[0]?.message ?? e?.errors?.[0]?.message ?? "ورودی نامعتبر" },
         { status: 400 }
       );
     }
@@ -156,7 +156,7 @@ export async function POST(req: NextRequest) {
         // Step 2: Check if already enrolled in THIS school + classroom
         const existingEnrollment = await tx.schoolEnrollment.findFirst({
           where: {
-            schoolId: req.headers.get("x-samik-school-id")!,
+            schoolId: ctx.schoolId,
             studentUserId: user.id,
             classRoomId: body.classRoomId,
             academicYear: body.academicYear,
@@ -179,7 +179,8 @@ export async function POST(req: NextRequest) {
             guardianPhone1: body.guardianPhone1,
             guardianPhone2: body.guardianPhone2 || null,
             status: isNewUser ? "ACTIVE" : "PENDING_CONFIRMATION",
-          },
+            schoolId: ctx.schoolId,
+          } as any,
         });
 
         return { enrollment, user, isNewUser, classroom };

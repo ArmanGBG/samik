@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, FormEvent } from "react";
+import { Suspense, useState, useEffect, useRef, FormEvent } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { SamikLogo } from "@/components/brand-logo";
 import { Button } from "@/components/ui/button";
@@ -30,7 +30,7 @@ const RESEND_COOLDOWN = 120; // seconds
 
 const fa = (n: number) => n.toLocaleString("fa-IR");
 
-export default function VerifyPage() {
+function VerifyForm() {
   const router = useRouter();
   const search = useSearchParams();
   const [phone, setPhone] = useState(search.get("phone") ?? "");
@@ -118,6 +118,8 @@ export default function VerifyPage() {
       setResendIn(RESEND_COOLDOWN);
       setCode("");
       submittedRef.current = false;
+    } catch {
+      toast.error("خطای شبکه در ارسال مجدد کد.");
     } finally {
       setResending(false);
     }
@@ -203,16 +205,16 @@ export default function VerifyPage() {
                   type="button"
                   variant="link"
                   size="sm"
-                  className="h-auto p-0 text-xs text-navy cursor-pointer"
+                  className="h-auto p-0 text-xs text-navy hover:text-navy-dark cursor-pointer gap-1.5"
                   onClick={onResend}
                   disabled={resending}
                 >
                   {resending ? (
-                    <Loader2 className="ml-1 h-3 w-3 animate-spin" />
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
                   ) : (
-                    <RotateCcw className="ml-1 h-3 w-3" />
+                    <RotateCcw className="h-3.5 w-3.5" />
                   )}
-                  ارسال مجدد کد
+                  ارسال مجدد کد پیامکی
                 </Button>
               )}
             </div>
@@ -220,17 +222,17 @@ export default function VerifyPage() {
           <CardFooter className="p-6 pt-2 flex flex-col gap-3">
             <Button
               type="submit"
-              className="stagger-item w-full h-10 bg-emerald hover:bg-emerald-dark cursor-pointer"
+              className="stagger-item w-full h-11 bg-emerald hover:bg-emerald-dark text-base font-semibold shadow-md shadow-emerald/20 cursor-pointer gap-2"
               style={{ animationDelay: "120ms" }}
               disabled={loading || code.length !== 6}
             >
               {loading ? (
                 <>
-                  <Loader2 className="ml-2 h-4 w-4 animate-spin" />
-                  در حال بررسی...
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  در حال بررسی و تأیید کد...
                 </>
               ) : (
-                "ورود به سامیک"
+                "تأیید کد و ورود به سامانه"
               )}
             </Button>
 
@@ -238,16 +240,30 @@ export default function VerifyPage() {
               type="button"
               variant="ghost"
               size="sm"
-              className="stagger-item w-full text-muted-foreground hover:text-navy cursor-pointer"
+              className="stagger-item w-full text-muted-foreground hover:text-navy hover:bg-muted/50 cursor-pointer gap-1.5"
               style={{ animationDelay: "150ms" }}
               onClick={() => router.push("/login")}
             >
-              <ArrowRight className="ml-1 h-4 w-4" />
-              تغییر شماره موبایل
+              <ArrowRight className="h-4 w-4" />
+              ویرایش یا اصلاح شماره موبایل
             </Button>
           </CardFooter>
         </form>
       </Card>
     </div>
+  );
+}
+
+export default function VerifyPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-offwhite via-white to-emerald-50">
+          <Loader2 className="h-8 w-8 animate-spin text-navy" />
+        </div>
+      }
+    >
+      <VerifyForm />
+    </Suspense>
   );
 }

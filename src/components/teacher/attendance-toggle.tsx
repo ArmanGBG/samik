@@ -83,16 +83,18 @@ export function AttendanceToggle({
             type="button"
             onClick={() => onChange(s.value)}
             className={cn(
-              "flex items-center gap-1 rounded-full font-medium transition-all",
-              isSm ? "px-2 py-0.5" : "px-3 py-1",
+              "flex items-center gap-1 rounded-full font-medium transition-all select-none cursor-pointer",
+              "active:scale-95 focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none",
+              isSm ? "px-2.5 py-1 min-h-[28px]" : "px-3.5 py-1.5 min-h-[34px]",
               isActive
-                ? cn(s.activeClass, "shadow-md")
+                ? cn(s.activeClass, "shadow-sm scale-[1.02]")
                 : s.inactiveClass
             )}
             aria-pressed={isActive}
-            title={s.label}
+            aria-label={`تغییر وضعیت به ${s.label}`}
+            title={`وضعیت ${s.label}`}
           >
-            <Icon className={isSm ? "h-3 w-3" : "h-3.5 w-3.5"} />
+            <Icon className={isSm ? "h-3.5 w-3.5" : "h-4 w-4"} />
             <span className="hidden sm:inline">{s.label}</span>
           </button>
         );

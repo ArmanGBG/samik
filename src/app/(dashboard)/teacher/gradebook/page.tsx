@@ -26,13 +26,21 @@ export default function TeacherGradebookIndexPage() {
   useEffect(() => {
     async function load() {
       try {
-        const r = await fetch("/api/v1/deputy/timetable");
-        const d = await r.json();
+        const [meRes, ttRes] = await Promise.all([
+          fetch("/api/v1/me"),
+          fetch("/api/v1/deputy/timetable"),
+        ]);
+        const meData = await meRes.json();
+        const d = await ttRes.json();
         if (d.ok) {
+          const teacherId = meData.ok ? meData.user.id : null;
+          const teacherSlots = teacherId ? d.slots.filter((s: any) => s.teacher.id === teacherId) : d.slots;
+          const slotsToUse = teacherSlots.length > 0 ? teacherSlots : d.slots;
+
           // Deduplicate by classroom (a teacher may teach multiple subjects in one classroom)
           const seen = new Set<string>();
           const unique: ClassroomSlot[] = [];
-          for (const s of d.slots) {
+          for (const s of slotsToUse) {
             if (!seen.has(s.classRoom.id)) {
               seen.add(s.classRoom.id);
               unique.push(s);

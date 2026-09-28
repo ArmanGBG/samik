@@ -23,6 +23,8 @@ import {
   Users,
   LogOut,
   ShieldAlert,
+  Check,
+  X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -81,8 +83,33 @@ export default function SelectProfilePage() {
       toast.success(`ورود به ${data.profile.schoolName} با نقش ${data.profile.role}`);
       const slug = data.profile.role.toLowerCase().replace("_", "-");
       router.replace(`/${slug}`);
+    } catch {
+      toast.error("خطا در برقراری ارتباط با سرور.");
     } finally {
       setSelecting(null);
+    }
+  }
+
+  const [confirming, setConfirming] = useState<string | null>(null);
+  async function handleConfirmEnrollment(enrollmentId: string, action: "ACTIVE" | "ARCHIVED") {
+    setConfirming(`${enrollmentId}:${action}`);
+    try {
+      const r = await fetch(`/api/v1/student/enrollments/${enrollmentId}/confirm`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action }),
+      });
+      const d = await r.json();
+      if (!d.ok) {
+        toast.error(d.error ?? "عملیات ناموفق بود.");
+        return;
+      }
+      toast.success(action === "ACTIVE" ? "ثبت‌نام تأیید شد." : "دعوتنامه رد شد.");
+      auth.fetch();
+    } catch {
+      toast.error("خطا در برقراری ارتباط با سرور");
+    } finally {
+      setConfirming(null);
     }
   }
 
@@ -134,10 +161,10 @@ export default function SelectProfilePage() {
                 <Button
                   variant="outline"
                   onClick={() => auth.logout()}
-                  className="cursor-pointer"
+                  className="cursor-pointer gap-2"
                 >
-                  <LogOut className="ml-2 h-4 w-4" />
-                  خروج از حساب
+                  <LogOut className="h-4 w-4" />
+                  خروج از حساب کاربری
                 </Button>
               }
             />
@@ -147,19 +174,19 @@ export default function SelectProfilePage() {
                 const style = ROLE_STYLES[p.role] ?? ROLE_STYLES.TEACHER;
                 const Icon = style.icon;
                 const key = `${p.schoolId}:${p.role}${p.studentEnrollmentId ?? ""}`;
+                const isPending = p.status === "PENDING_CONFIRMATION";
                 const isSelecting = selecting === key;
                 return (
-                  <button
+                  <div
                     key={key + i}
-                    onClick={() => selectProfile(p)}
-                    disabled={isSelecting}
                     style={{ animationDelay: `${i * 60}ms` }}
                     className={cn(
-                      "stagger-item kpi-card w-full flex items-center gap-3 p-3 rounded-lg border-2",
-                      "border-border bg-white text-right cursor-pointer",
-                      "hover:shadow-md disabled:cursor-not-allowed disabled:opacity-50",
+                      "stagger-item kpi-card w-full flex items-center gap-3 p-3.5 rounded-xl border-2",
+                      "border-border bg-white text-right select-none transition-all",
+                      isPending ? "bg-warning/5 border-warning/30" : "hover:shadow-md cursor-pointer",
                       style.ring
                     )}
+                    onClick={isPending ? undefined : () => selectProfile(p)}
                   >
                     <div
                       className={cn(
@@ -174,25 +201,55 @@ export default function SelectProfilePage() {
                       )}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-foreground truncate">
+                      <p className="text-sm font-semibold text-foreground truncate">
                         {p.label}
                       </p>
                       <p className="text-[11px] text-muted-foreground tabular-nums" dir="ltr">
                         {p.schoolSubdomain}.samik.app
                       </p>
                     </div>
-                    <ArrowLeft className="h-4 w-4 text-muted-foreground shrink-0" />
-                  </button>
+
+                    {isPending ? (
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <Button
+                          size="sm"
+                          variant="default"
+                          className="h-7 text-xs bg-emerald hover:bg-emerald-600 gap-1 px-2"
+                          disabled={confirming !== null}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (p.studentEnrollmentId) handleConfirmEnrollment(p.studentEnrollmentId, "ACTIVE");
+                          }}
+                        >
+                          <Check className="h-3 w-3" /> تأیید
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 text-xs text-destructive hover:bg-destructive/10 hover:text-destructive border-destructive/20 gap-1 px-2"
+                          disabled={confirming !== null}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (p.studentEnrollmentId) handleConfirmEnrollment(p.studentEnrollmentId, "ARCHIVED");
+                          }}
+                        >
+                          <X className="h-3 w-3" /> رد
+                        </Button>
+                      </div>
+                    ) : (
+                      <ArrowLeft className="h-4 w-4 text-muted-foreground shrink-0 transition-transform group-hover:-translate-x-1" />
+                    )}
+                  </div>
                 );
               })}
               <div className="pt-3 mt-2 border-t border-border">
                 <Button
                   variant="ghost"
                   onClick={() => auth.logout()}
-                  className="w-full text-muted-foreground hover:text-destructive cursor-pointer"
+                  className="w-full text-muted-foreground hover:text-destructive hover:bg-destructive/10 cursor-pointer gap-2"
                 >
-                  <LogOut className="ml-2 h-4 w-4" />
-                  خروج از حساب
+                  <LogOut className="h-4 w-4" />
+                  خروج و بازگشت به صفحه ورود
                 </Button>
               </div>
             </div>

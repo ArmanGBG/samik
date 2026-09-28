@@ -84,6 +84,10 @@ export async function POST(req: NextRequest) {
         { status: 429 }
       );
     }
-    throw e;
+    console.error("[OTP_GENERATE_ERROR]", e);
+    return NextResponse.json(
+      { ok: false, error: "خطا در ارسال کد یک‌بار مصرف. لطفاً لحظاتی بعد تلاش کنید." },
+      { status: 500 }
+    );
   }
 }

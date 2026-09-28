@@ -28,9 +28,9 @@ import { db } from "@/lib/db";
 export async function GET(req: NextRequest) {
   return withTenantContext(req, ["TEACHER", "DEPUTY", "PRINCIPAL"], async (ctx) => {
     const classroomId = req.nextUrl.searchParams.get("classroomId");
-    if (!classroomId) {
+    if (!classroomId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(classroomId)) {
       return NextResponse.json(
-        { ok: false, error: "پارامتر classroomId الزامی است." },
+        { ok: false, error: "پارامتر classroomId نامعتبر است." },
         { status: 400 }
       );
     }
@@ -48,27 +48,20 @@ export async function GET(req: NextRequest) {
     const now = new Date();
     const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
 
-    // Pre-fetch the active student IDs (needed for the behavioral-points
-    // groupBy which filters by studentUserId, not classRoomId — since
-    // BehavioralPoint has no classRoomId field per the ERD).
-    const enrollmentsFirst = await db.schoolEnrollment.findMany({
+    // 1. Active students in this classroom (with student details)
+    const enrollments = await db.schoolEnrollment.findMany({
       where: { classRoomId: classroomId, status: "ACTIVE" },
-      select: { studentUserId: true },
-    });
-    const studentIds = enrollmentsFirst.map((e) => e.studentUserId);
-
-    // === Parallel queries (single round-trip per concern) ===
-    const [enrollments, assessments, behavioralCounts] = await Promise.all([
-      // 1. Active students in this classroom (with student details)
-      db.schoolEnrollment.findMany({
-        where: { classRoomId: classroomId, status: "ACTIVE" },
-        include: {
-          student: {
-            select: { id: true, firstName: true, lastName: true },
-          },
+      include: {
+        student: {
+          select: { id: true, firstName: true, lastName: true },
         },
-        orderBy: { student: { lastName: "asc" } },
-      }),
+      },
+      orderBy: { student: { lastName: "asc" } },
+    });
+    const studentIds = enrollments.map((e) => e.studentUserId);
+
+    // === Parallel queries for assessments & behavioral points ===
+    const [assessments, behavioralCounts] = await Promise.all([
 
       // 2. Assessments for this classroom in the last 30 days BY THIS TEACHER
       //    (per Section 7 — teacher sees their own assessments only)

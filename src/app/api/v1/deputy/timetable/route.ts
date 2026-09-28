@@ -151,8 +151,12 @@ export async function POST(req: NextRequest) {
 export async function DELETE(req: NextRequest) {
   return withTenantContext(req, ["DEPUTY", "PRINCIPAL"], async () => {
     const id = req.nextUrl.searchParams.get("id");
-    if (!id) {
-      return NextResponse.json({ ok: false, error: "پارامتر id الزامی است." }, { status: 400 });
+    if (!id || !z.string().uuid().safeParse(id).success) {
+      return NextResponse.json({ ok: false, error: "شناسه خانه برنامه هفتگی نامعتبر است." }, { status: 400 });
+    }
+    const existing = await db.timetableSlot.findUnique({ where: { id } });
+    if (!existing) {
+      return NextResponse.json({ ok: false, error: "خانه برنامه هفتگی یافت نشد." }, { status: 404 });
     }
     await db.timetableSlot.delete({ where: { id } });
     return NextResponse.json({ ok: true });

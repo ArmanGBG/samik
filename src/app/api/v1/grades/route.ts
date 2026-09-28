@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { withTenantContext } from "@/lib/middleware-helpers/tenant-guard";
 import { db } from "@/lib/db";
+import { emitGradeSaved } from "@/lib/realtime/event-bus";
 
 const SaveBody = z.object({
   assessmentId: z.string().uuid(),
@@ -46,26 +47,45 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const grade = await db.grade.upsert({
-      where: {
-        assessmentId_studentUserId: {
+    try {
+      const grade = await db.grade.upsert({
+        where: {
+          assessmentId_studentUserId: {
+            assessmentId: body.assessmentId,
+            studentUserId: body.studentUserId,
+          },
+        },
+        create: {
           assessmentId: body.assessmentId,
           studentUserId: body.studentUserId,
+          numericScore: body.numericScore ?? null,
+          descriptiveScore: body.descriptiveScore ?? null,
+          isAbsent: body.isAbsent ?? false,
         },
-      },
-      create: {
-        assessmentId: body.assessmentId,
+        update: {
+          numericScore: body.numericScore ?? null,
+          descriptiveScore: body.descriptiveScore ?? null,
+          isAbsent: body.isAbsent ?? false,
+        },
+      });
+
+      // Emit real-time event for Student Dashboard and Teacher Gradebook sync
+      emitGradeSaved({
+        schoolId: ctx.schoolId,
         studentUserId: body.studentUserId,
+        assessmentId: body.assessmentId,
         numericScore: body.numericScore ?? null,
         descriptiveScore: body.descriptiveScore ?? null,
         isAbsent: body.isAbsent ?? false,
-      },
-      update: {
-        numericScore: body.numericScore ?? null,
-        descriptiveScore: body.descriptiveScore ?? null,
-        isAbsent: body.isAbsent ?? false,
-      },
-    });
-    return NextResponse.json({ ok: true, grade }, { status: 201 });
+      });
+
+      return NextResponse.json({ ok: true, grade }, { status: 201 });
+    } catch (err) {
+      console.error("[GRADE_UPSERT_ERROR]", err);
+      return NextResponse.json(
+        { ok: false, error: "خطا در ذخیره نمره در پایگاه داده." },
+        { status: 500 }
+      );
+    }
   });
 }

@@ -115,6 +115,9 @@ export default function RollCallPage() {
         for (const s of stuData.students) init.set(s.id, "PRESENT");
         setAttendance(init);
       }
+    } catch (err) {
+      console.error("[LOAD_ATTENDANCE_SLOT_ERROR]", err);
+      toast.error("خطا در بارگذاری اطلاعات کلاس و دانش‌آموزان.");
     } finally {
       setLoading(false);
     }
@@ -217,10 +220,10 @@ export default function RollCallPage() {
             variant="ghost"
             size="sm"
             onClick={() => router.push("/teacher")}
-            className="h-8 gap-1.5 text-xs"
+            className="h-8 gap-1.5 text-xs text-muted-foreground hover:text-navy hover:bg-muted/50 cursor-pointer"
           >
             <ArrowRight className="h-4 w-4" />
-            بازگشت به داشبورد
+            بازگشت به برنامه کلاس‌ها
           </Button>
         }
       />
@@ -308,7 +311,7 @@ export default function RollCallPage() {
       </ScrollReveal>
 
       {/* Commit bar — fixed at bottom, compact py-2 */}
-      <div className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-border py-2">
+      <div className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-border py-2.5 shadow-lg">
         <div className="max-w-4xl mx-auto flex items-center gap-3 px-4">
           <div className="flex-1 text-xs text-muted-foreground tabular-nums">
             {stats.present.toLocaleString("fa-IR")} حاضر • {stats.absent.toLocaleString("fa-IR")} غایب • {stats.late.toLocaleString("fa-IR")} تاخیر • {stats.excused.toLocaleString("fa-IR")} موجه
@@ -317,17 +320,17 @@ export default function RollCallPage() {
             onClick={handleCommit}
             disabled={submitting}
             size="lg"
-            className="bg-emerald hover:bg-emerald-dark h-10 px-6 text-sm gap-2 shadow-lg shadow-emerald/20"
+            className="bg-emerald hover:bg-emerald-dark h-11 px-6 text-sm font-semibold gap-2 shadow-lg shadow-emerald/20 cursor-pointer"
           >
             {submitting ? (
               <>
                 <Loader2 className="h-4 w-4 animate-spin" />
-                در حال ثبت...
+                در حال ارسال و ثبت نهایی لیست...
               </>
             ) : (
               <>
                 <Send className="h-4 w-4" />
-                ثبت نهایی لیست
+                ثبت نهایی و ارسال لیست حضور و غیاب
               </>
             )}
           </Button>

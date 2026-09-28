@@ -33,6 +33,7 @@ import {
   Clock,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { RealtimeProvider, useRealtimeStatus } from "@/lib/realtime/realtime-context";
 
 interface NavItem {
   href: string;
@@ -124,44 +125,57 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
   const visibleNav = NAV.filter((n) => !n.roles || n.roles.includes(role));
 
   return (
-    <div className="min-h-screen flex flex-col bg-offwhite">
-      {/* Top bar — 56px height (h-14), compact px-4 */}
-      <header className="sticky top-0 z-30 h-14 border-b border-border bg-white/95 backdrop-blur flex items-center px-4 gap-3">
-        {/* Mobile menu trigger */}
-        <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
-          <SheetTrigger asChild>
-            <Button variant="ghost" size="icon" className="lg:hidden">
-              <Menu className="h-5 w-5" />
-            </Button>
-          </SheetTrigger>
-          <SheetContent side="right" className="w-70 p-0 bg-sidebar" style={{ width: 280 }}>
-            <SidebarHeader schoolName={schoolName} />
-            <div className="py-3">
-              <NavLinks
-                items={visibleNav}
-                route={route}
-                pathname={pathname}
-                onNavigate={() => setMobileOpen(false)}
-              />
-            </div>
-            <SidebarFooter />
-          </SheetContent>
-        </Sheet>
+    <RealtimeProvider>
+      <div className="min-h-screen flex flex-col bg-offwhite">
+        {/* Top bar — 56px height (h-14), compact px-4 */}
+        <header className="sticky top-0 z-30 h-14 border-b border-border bg-white/95 backdrop-blur flex items-center px-4 gap-3">
+          {/* Mobile menu trigger */}
+          <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
+            <SheetTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="lg:hidden cursor-pointer"
+                aria-label="باز کردن منوی دسترسی سریع"
+              >
+                <Menu className="h-5 w-5" />
+              </Button>
+            </SheetTrigger>
+            <SheetContent side="right" className="w-70 p-0 bg-sidebar" style={{ width: 280 }}>
+              <SidebarHeader schoolName={schoolName} />
+              <div className="py-3">
+                <NavLinks
+                  items={visibleNav}
+                  route={route}
+                  pathname={pathname}
+                  onNavigate={() => setMobileOpen(false)}
+                />
+              </div>
+              <SidebarFooter />
+            </SheetContent>
+          </Sheet>
 
-        {/* School name + role label — compact */}
-        <div className="flex-1 min-w-0">
-          <p className="text-[11px] text-muted-foreground leading-tight truncate">
-            {ROLE_LABEL[role]}
-          </p>
-          <p className="text-sm font-semibold text-foreground truncate leading-tight">
-            {schoolName}
-          </p>
-        </div>
+          {/* School name + role label — compact */}
+          <div className="flex-1 min-w-0">
+            <p className="text-[11px] text-muted-foreground leading-tight truncate">
+              {ROLE_LABEL[role]}
+            </p>
+            <p className="text-sm font-semibold text-foreground truncate leading-tight">
+              {schoolName}
+            </p>
+          </div>
 
-        {/* Profile switcher — compact avatar (h-8 w-8), name hidden on mobile */}
-        <DropdownMenu>
+          {/* Realtime Live Indicator */}
+          <RealtimeIndicator />
+
+          {/* Profile switcher — compact avatar (h-8 w-8), name hidden on mobile */}
+          <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" className="gap-2 pr-2 pl-2 h-9">
+            <Button
+              variant="ghost"
+              className="gap-2 pr-2 pl-2 h-9 cursor-pointer"
+              aria-label="منوی حساب کاربری و انتخاب پروفایل"
+            >
               <Avatar className="h-8 w-8 bg-navy text-white">
                 <AvatarFallback className="bg-navy text-white text-xs font-medium">
                   {initials}
@@ -185,13 +199,13 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
               </div>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => router.push("/select-profile")}>
-              <ShieldCheck className="h-4 w-4 ml-2" />
-              تغییر پروفایل
+            <DropdownMenuItem onClick={() => router.push("/select-profile")} className="cursor-pointer gap-2">
+              <ShieldCheck className="h-4 w-4" />
+              تغییر نقش یا مدرسه (پروفایل)
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => auth.logout()}>
-              <LogOut className="h-4 w-4 ml-2" />
-              خروج از حساب
+            <DropdownMenuItem onClick={() => auth.logout()} className="cursor-pointer gap-2 text-destructive focus:text-destructive">
+              <LogOut className="h-4 w-4" />
+              خروج از حساب کاربری
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
@@ -216,6 +230,30 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
           </footer>
         </main>
       </div>
+    </div>
+    </RealtimeProvider>
+  );
+}
+
+function RealtimeIndicator() {
+  const { isConnected } = useRealtimeStatus();
+  return (
+    <div
+      className={cn(
+        "hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium transition-colors select-none",
+        isConnected
+          ? "bg-emerald/10 text-emerald border border-emerald/30"
+          : "bg-muted text-muted-foreground border border-border"
+      )}
+      title={isConnected ? "ارتباط زنده Real-time برقرار است" : "در حال تلاش برای برقراری ارتباط..."}
+    >
+      <span
+        className={cn(
+          "h-2 w-2 rounded-full",
+          isConnected ? "bg-emerald animate-pulse" : "bg-muted-foreground"
+        )}
+      />
+      {isConnected ? "برخط (زنده)" : "در حال اتصال"}
     </div>
   );
 }

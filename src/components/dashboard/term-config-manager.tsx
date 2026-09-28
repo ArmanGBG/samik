@@ -66,6 +66,9 @@ export function TermConfigManager() {
           setTermDate(format(dt, "yyyy-MM-dd"));
         }
       }
+    } catch (err) {
+      console.error("[LOAD_SCHOOL_CONFIG_ERROR]", err);
+      toast.error("خطا در دریافت تنظیمات مدرسه.");
     } finally {
       setLoading(false);
     }
@@ -94,6 +97,8 @@ export function TermConfigManager() {
       }
       toast.success("تاریخ شروع ترم ذخیره شد.");
       load();
+    } catch {
+      toast.error("خطا در برقراری ارتباط با سرور.");
     } finally {
       setSubmitting(false);
     }
@@ -277,19 +282,63 @@ export function TermConfigManager() {
               <Button
                 type="submit"
                 disabled={submitting}
-                className="bg-emerald hover:bg-emerald-dark cursor-pointer"
+                className="bg-emerald hover:bg-emerald-dark cursor-pointer gap-2 font-medium"
               >
                 {submitting ? (
                   <>
-                    <Loader2 className="ml-2 h-4 w-4 animate-spin" />
-                    در حال ذخیره...
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    در حال ذخیره تنظیمات ترم...
                   </>
                 ) : (
-                  "ذخیره"
+                  <>
+                    <Save className="h-4 w-4" />
+                    ذخیره تنظیمات تاریخ شروع ترم
+                  </>
                 )}
               </Button>
             </CardFooter>
           </form>
+        </Card>
+      </ScrollReveal>
+
+      {/* Batch Archive Card */}
+      <ScrollReveal delay={120}>
+        <Card className="border-destructive/30 border-2">
+          <CardHeader>
+            <CardTitle className="text-base text-destructive flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4" />
+              پایان سال تحصیلی و بایگانی دانش‌آموزان
+            </CardTitle>
+            <CardDescription className="flex items-start gap-2">
+              <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
+              در پایان سال تحصیلی، با کلیک روی دکمه زیر، تمامی دانش‌آموزان سال گذشته بایگانی (Archived) می‌شوند تا سیستم برای ثبت‌نام‌های سال جدید آماده شود. سوابق تحصیلی آن‌ها حفظ خواهد شد.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+             <Button
+                type="button"
+                variant="destructive"
+                className="w-full sm:w-auto font-medium"
+                onClick={async () => {
+                  if (!confirm("آیا از بایگانی گروهی تمامی دانش‌آموزان فعال اطمینان دارید؟ این عملیات برای شروع سال تحصیلی جدید ضروری است و سوابق را پاک نمی‌کند.")) return;
+                  
+                  const toastId = toast.loading("در حال بایگانی دانش‌آموزان...");
+                  try {
+                    const r = await fetch("/api/v1/principal/term-config/archive", { method: "POST" });
+                    const d = await r.json();
+                    if (!d.ok) {
+                      toast.error(d.error ?? "خطا در بایگانی.", { id: toastId });
+                      return;
+                    }
+                    toast.success(d.message, { id: toastId });
+                  } catch {
+                    toast.error("خطا در برقراری ارتباط با سرور", { id: toastId });
+                  }
+                }}
+              >
+                بایگانی گروهی دانش‌آموزانِ سال جاری
+              </Button>
+          </CardContent>
         </Card>
       </ScrollReveal>
     </div>

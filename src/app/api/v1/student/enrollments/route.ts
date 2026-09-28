@@ -51,6 +51,7 @@ export async function GET(req: NextRequest) {
         OR: [
           { guardianPhone1: user.phoneNumber },
           { guardianPhone2: user.phoneNumber },
+          { studentUserId: user.id },
           ...(enrollmentId ? [{ id: enrollmentId }] : []),
         ],
       },
