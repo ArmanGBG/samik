@@ -36,7 +36,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="fa" dir="rtl" suppressHydrationWarning>
-      <body className="font-persian antialiased bg-background text-foreground min-h-screen flex flex-col">
+      <body suppressHydrationWarning className="font-persian antialiased bg-background text-foreground min-h-screen flex flex-col">
         <ThemeProvider
           attribute="class"
           defaultTheme="light"

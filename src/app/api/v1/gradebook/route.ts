@@ -2,11 +2,18 @@ import { NextRequest, NextResponse } from "next/server";
 import { withTenantContext } from "@/lib/middleware-helpers/tenant-guard";
 import { db } from "@/lib/db";
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
 /**
- * GET /api/v1/gradebook?classroomId=...
+ * GET /api/v1/gradebook?classroomId=...&subjectId=...
  *
  * Matrix query — fetches the classroom's students + last 30 days of
  * assessments + their grades in a single round-trip.
+ *
+ * The gradebook is scoped to ONE lesson, `(classroomId, subjectId)`, and both
+ * parameters are required. Without the subject scope a class taught by one
+ * teacher across several subjects would merge every subject's assessments,
+ * discipline points and attendance into a single matrix.
  *
  * Per Section 7 — "پرفورمنس گرید ماتریسی (Matrix Query Optimization)":
  *   > "واکشی لیست دانش‌آموزان و کراس‌جوین (Cross-Join) کردن آن‌ها با نمرات
@@ -28,9 +35,16 @@ import { db } from "@/lib/db";
 export async function GET(req: NextRequest) {
   return withTenantContext(req, ["TEACHER", "DEPUTY", "PRINCIPAL"], async (ctx) => {
     const classroomId = req.nextUrl.searchParams.get("classroomId");
-    if (!classroomId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(classroomId)) {
+    const subjectId = req.nextUrl.searchParams.get("subjectId");
+    if (!classroomId || !UUID_RE.test(classroomId)) {
       return NextResponse.json(
         { ok: false, error: "پارامتر classroomId نامعتبر است." },
+        { status: 400 }
+      );
+    }
+    if (!subjectId || !UUID_RE.test(subjectId)) {
+      return NextResponse.json(
+        { ok: false, error: "پارامتر subjectId نامعتبر است." },
         { status: 400 }
       );
     }
@@ -44,9 +58,26 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ ok: false, error: "کلاس یافت نشد." }, { status: 404 });
     }
 
-    // Window: last 30 days
-    const now = new Date();
-    const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+    // A TEACHER may only see their own classes; DEPUTY and PRINCIPAL see all.
+    // `TenantCtx` exposes a single `role`, so a plain equality check is correct
+    // here. The previous `ctx.roles.includes(...)` threw on every request
+    // (`ctx.roles` is undefined), which surfaced as "class not found".
+    const restrictToOwnSlots = ctx.role === "TEACHER";
+    const teacherScope = restrictToOwnSlots ? { teacherUserId: ctx.userId } : {};
+
+    // Find the subject(s) this viewer may read in this classroom. A TEACHER
+    // must actually teach the pair, otherwise the gradebook is empty anyway.
+    const slots = await db.timetableSlot.findMany({
+      where: {
+        classRoomId: classroomId,
+        subjectId,
+        ...teacherScope,
+      },
+      include: {
+        subject: { select: { title: true } }
+      }
+    });
+    const subjects = Array.from(new Set(slots.map(s => s.subject.title)));
 
     // 1. Active students in this classroom (with student details)
     const enrollments = await db.schoolEnrollment.findMany({
@@ -60,16 +91,14 @@ export async function GET(req: NextRequest) {
     });
     const studentIds = enrollments.map((e) => e.studentUserId);
 
-    // === Parallel queries for assessments & behavioral points ===
-    const [assessments, behavioralCounts] = await Promise.all([
-
-      // 2. Assessments for this classroom in the last 30 days BY THIS TEACHER
-      //    (per Section 7 — teacher sees their own assessments only)
+    // === Parallel queries for assessments & behavioral points & absences ===
+    const [assessments, behavioralCounts, sessions] = await Promise.all([
+      // 2. ALL Assessments for this classroom + subject BY THIS TEACHER
       db.assessment.findMany({
         where: {
           classRoomId: classroomId,
-          teacherUserId: ctx.userId,
-          date: { gte: thirtyDaysAgo },
+          subjectId,
+          ...teacherScope,
         },
         include: {
           grades: {
@@ -84,16 +113,34 @@ export async function GET(req: NextRequest) {
         orderBy: { date: "asc" },
       }),
 
-      // 3. Behavioral point counts per student (last 30 days)
-      //    Filter by the classroom's student IDs since BehavioralPoint has
-      //    no classRoomId column.
+      // 3. ALL Behavioral point counts per student — restricted to this
+      // subject, so discipline raised in another lesson is not counted here.
       db.behavioralPoint.groupBy({
         by: ["studentUserId", "pointType"],
         where: {
           studentUserId: { in: studentIds },
-          createdAt: { gte: thirtyDaysAgo },
+          subjectId,
         },
         _count: { _all: true },
+      }),
+
+      // 4. ALL ClassSessions for this classroom + subject
+      db.classSession.findMany({
+        where: {
+          timetableSlot: {
+            classRoomId: classroomId,
+            subjectId,
+            ...teacherScope,
+          },
+          status: "SUBMITTED"
+        },
+        include: {
+          attendanceRecords: {
+            where: { studentUserId: { in: studentIds } },
+            select: { studentUserId: true, status: true }
+          }
+        },
+        orderBy: { date: "asc" }
       }),
     ]);
 
@@ -118,17 +165,15 @@ export async function GET(req: NextRequest) {
           descriptiveScore: grade?.descriptiveScore ?? null,
           isAbsent: grade?.isAbsent ?? false,
         });
-        // Per Section 7 — don't count is_absent as zero in the average
         if (grade && grade.numericScore !== null && !grade.isAbsent) {
           numericSum += grade.numericScore;
           numericCount++;
         }
       }
 
-      const monthlyAverage =
+      const termAverage =
         numericCount > 0 ? numericSum / numericCount : null;
 
-      // Behavioral point counts (from the groupBy result)
       const positiveCount =
         behavioralCounts.find(
           (b) => b.studentUserId === studentId && b.pointType === "POSITIVE"
@@ -137,6 +182,17 @@ export async function GET(req: NextRequest) {
         behavioralCounts.find(
           (b) => b.studentUserId === studentId && b.pointType === "NEGATIVE"
         )?._count._all ?? 0;
+        
+      
+      const attendance = sessions.map(s => {
+        const record = s.attendanceRecords.find(r => r.studentUserId === studentId);
+        return {
+          sessionId: s.id,
+          status: record ? record.status : "PRESENT"
+        };
+      });
+      const totalAbsences = attendance.filter(a => a.status === "ABSENT").length;
+
 
       return {
         enrollmentId: enr.id,
@@ -144,14 +200,16 @@ export async function GET(req: NextRequest) {
         firstName: enr.student.firstName,
         lastName: enr.student.lastName,
         fullName: `${enr.student.firstName} ${enr.student.lastName}`,
-        monthlyAverage: monthlyAverage !== null
-          ? Math.round(monthlyAverage * 100) / 100
+        monthlyAverage: termAverage !== null
+          ? Math.round(termAverage * 100) / 100
           : null,
         grades,
+        attendance,
         behavioralPoints: {
           positive: positiveCount,
           negative: negativeCount,
         },
+        totalAbsences,
       };
     });
 
@@ -161,7 +219,9 @@ export async function GET(req: NextRequest) {
         id: classroom.id,
         gradeLevel: classroom.gradeLevel,
         name: classroom.name,
+        subjects,
       },
+      sessions: sessions.map(s => ({ id: s.id, date: s.date.toISOString().slice(0,10) })),
       assessments: assessments.map((a) => ({
         id: a.id,
         title: a.title,

@@ -38,6 +38,7 @@ import {
   Info,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { toPersianDate } from "@/lib/date-utils";
 import { PageHeader } from "@/components/shared/page-header";
 import { EmptyState } from "@/components/shared/empty-state";
 
@@ -51,7 +52,13 @@ interface Subject {
 type SortKey = "title" | "slotCount" | "createdAt";
 type SortDir = "asc" | "desc";
 
-export function SubjectsManager() {
+export function SubjectsManager({
+  schoolId,
+  hideHeader = false,
+}: {
+  schoolId?: string;
+  hideHeader?: boolean;
+} = {}) {
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -62,7 +69,8 @@ export function SubjectsManager() {
   async function load() {
     setLoading(true);
     try {
-      const r = await fetch("/api/v1/principal/subjects");
+      const qs = schoolId ? `?schoolId=${schoolId}` : "";
+      const r = await fetch(`/api/v1/principal/subjects${qs}`);
       const d = await r.json();
       if (d.ok) setSubjects(d.subjects);
     } catch (err) {
@@ -75,13 +83,14 @@ export function SubjectsManager() {
 
   useEffect(() => {
     load();
-  }, []);
+  }, [schoolId]);
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
     setSubmitting(true);
     try {
-      const r = await fetch("/api/v1/principal/subjects", {
+      const qs = schoolId ? `?schoolId=${schoolId}` : "";
+      const r = await fetch(`/api/v1/principal/subjects${qs}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ title }),
@@ -104,7 +113,8 @@ export function SubjectsManager() {
   async function onDelete(id: string, title: string) {
     if (!confirm(`حذف درس «${title}»؟`)) return;
     try {
-      const r = await fetch(`/api/v1/principal/subjects?id=${id}`, {
+      const qs = schoolId ? `&schoolId=${schoolId}` : "";
+      const r = await fetch(`/api/v1/principal/subjects?id=${id}${qs}`, {
         method: "DELETE",
       });
       const d = await r.json();
@@ -156,12 +166,14 @@ export function SubjectsManager() {
   }, [subjects, sortKey, sortDir]);
 
   return (
-    <div className="max-w-6xl mx-auto space-y-6">
-      <PageHeader
-        title="دروس"
-        subtitle="تعریف دروس قابل ارائه در مدرسه."
-        icon={BookOpen}
-      />
+    <div className="max-w-6xl mx-auto space-y-4">
+      {!hideHeader && (
+        <PageHeader
+          title="دروس"
+          subtitle="تعریف دروس قابل ارائه در مدرسه."
+          icon={BookOpen}
+        />
+      )}
 
       <Card>
         <CardHeader>
@@ -276,7 +288,7 @@ export function SubjectsManager() {
                           {s.slotCount.toLocaleString("fa-IR")}
                         </TableCell>
                         <TableCell className="text-xs text-muted-foreground tabular-nums">
-                          {new Date(s.createdAt).toLocaleDateString("fa-IR")}
+                          {toPersianDate(s.createdAt)}
                         </TableCell>
                         <TableCell>
                           <TooltipProvider delayDuration={150}>
@@ -354,3 +366,5 @@ function SortableHead({
     </TableHead>
   );
 }
+
+// 1790852921

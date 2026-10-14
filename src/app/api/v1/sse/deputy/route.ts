@@ -42,7 +42,7 @@ export async function GET(req: NextRequest) {
   if (!payload || payload.kind !== "contextual") {
     return new Response("Invalid session", { status: 401 });
   }
-  if (payload.role !== "DEPUTY" && payload.role !== "PRINCIPAL") {
+  if (payload.role !== "DEPUTY" && payload.role !== "PRINCIPAL" && payload.role !== "SUPER_ADMIN") {
     return new Response("Forbidden — deputy role required", { status: 403 });
   }
   const schoolId = payload.schoolId;

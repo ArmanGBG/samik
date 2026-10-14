@@ -8,12 +8,10 @@ import {
   Users,
   GraduationCap,
   Loader2,
-  ArrowLeft,
   Plus,
-  ShieldCheck,
+  ArrowLeft,
 } from "lucide-react";
-import { format } from "date-fns";
-import { faIR } from "date-fns/locale";
+import { toPersianDate } from "@/lib/date-utils";
 import { PageHeader } from "@/components/shared/page-header";
 import { KpiCardGrid } from "@/components/shared/kpi-card";
 import { ScrollReveal } from "@/components/shared/scroll-reveal";
@@ -26,6 +24,7 @@ import {
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 interface SchoolRow {
   id: string;
@@ -34,6 +33,11 @@ interface SchoolRow {
   status: "ACTIVE" | "SUSPENDED";
   smsBalance: number;
   createdAt: string;
+  principal?: {
+    firstName: string;
+    lastName: string;
+    phoneNumber: string;
+  } | null;
   _count: { staffEmployments: number; enrollments: number; classrooms: number };
 }
 
@@ -42,9 +46,8 @@ interface SchoolRow {
  *
  * Per UI/UX Pro Max (Data-Dense Dashboard style):
  *   - KpiCardGrid at top: total schools, active schools, total students, total staff
- *   - Data sourced from existing GET /api/v1/super-admin/schools endpoint
- *     (already returns _count aggregates per school)
- *   - Recent schools preview table + quick action card
+ *   - Direct click-through from Recent Schools to individual School Control Panels
+ *   - Zero action redundancy (removed duplicate bottom card, streamlined primary CTA)
  */
 export function SuperAdminDashboard() {
   const [schools, setSchools] = useState<SchoolRow[]>([]);
@@ -85,13 +88,13 @@ export function SuperAdminDashboard() {
     <div className="max-w-6xl mx-auto space-y-6">
       <PageHeader
         title="داشبورد مدیر سامانه"
-        subtitle="نظارت بر کل پلتفرم"
+        subtitle="نظارت جامع و یکپارچه بر پلتفرم سامیک"
         icon={Building2}
         actions={
-          <Button asChild className="bg-navy hover:bg-navy-dark gap-2 shadow-sm">
-            <Link href="/super-admin/schools">
+          <Button asChild className="bg-navy hover:bg-navy-dark gap-2 shadow-sm cursor-pointer">
+            <Link href="/super-admin/schools?new=1">
               <Plus className="h-4 w-4" />
-              <span>مدیریت و ثبت مدارس جدید</span>
+              <span>ثبت مدرسه جدید</span>
             </Link>
           </Button>
         }
@@ -110,37 +113,42 @@ export function SuperAdminDashboard() {
                 value: totalSchools,
                 icon: Building2,
                 tint: "navy",
+                href: "/super-admin/schools",
               },
               {
                 label: "مدارس فعال",
                 value: activeSchools,
                 icon: CheckCircle2,
                 tint: "emerald",
+                href: "/super-admin/schools?status=ACTIVE",
               },
               {
                 label: "کل دانش‌آموزان",
                 value: totalStudents,
                 icon: GraduationCap,
                 tint: "info",
+                href: "/super-admin/students",
               },
               {
                 label: "کل پرسنل",
                 value: totalStaff,
                 icon: Users,
                 tint: "warning",
+                href: "/super-admin/staff",
               },
             ]}
           />
 
-          {/* Recent schools preview */}
+          {/* Recent schools preview with direct click-through */}
           <ScrollReveal delay={120}>
             <Card>
-              <CardHeader>
-                <CardTitle className="text-base text-navy">
-                  آخرین مدارس ثبت‌شده
+              <CardHeader className="pb-4">
+                <CardTitle className="text-base text-navy flex items-center gap-2">
+                  <Building2 className="h-4 w-4" />
+                  <span>آخرین مدارس ثبت‌شده</span>
                 </CardTitle>
-                <CardDescription>
-                  پنج مدرسهٔ اخیر — برای مشاهدهٔ کامل و ثبت مدرسهٔ جدید به صفحهٔ مدارس بروید.
+                <CardDescription className="mt-1">
+                  برای مدیریت امکانات، پرسنل و تنظیمات هر مدرسه، روی آن کلیک کنید.
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -152,73 +160,66 @@ export function SuperAdminDashboard() {
                     </p>
                   </div>
                 ) : (
-                  <div className="divide-y">
+                  <div className="divide-y divide-border/60">
                     {recentSchools.map((s, i) => (
-                      <div
+                      <Link
                         key={s.id}
-                        className="stagger-item flex items-center justify-between gap-3 py-2.5"
+                        href={`/super-admin/schools/${s.id}`}
+                        className="stagger-item flex items-center justify-between gap-3 p-3 rounded-xl hover:bg-slate-50/80 border border-transparent hover:border-border/60 transition-all cursor-pointer group"
                         style={{ animationDelay: `${i * 30}ms` }}
+                        title={`ورود به پنل مدیریت مدرسه ${s.name}`}
                       >
-                        <div className="flex items-center gap-3 min-w-0">
-                          <div className="h-9 w-9 rounded-lg bg-navy/10 text-navy flex items-center justify-center shrink-0">
-                            <Building2 className="h-4 w-4" />
+                        <div className="flex items-center gap-3.5 min-w-0">
+                          <div className="h-10 w-10 rounded-xl bg-navy/10 text-navy flex items-center justify-center shrink-0 group-hover:bg-navy group-hover:text-white transition-colors shadow-2xs">
+                            <Building2 className="h-5 w-5" />
                           </div>
                           <div className="min-w-0">
-                            <p className="text-sm font-medium truncate">{s.name}</p>
-                            <p
-                              dir="ltr"
-                              className="text-[11px] text-muted-foreground font-mono tabular-nums text-left"
-                            >
-                              {s.subdomain}.samik.app
-                            </p>
+                            <div className="flex items-center gap-2">
+                              <p className="text-sm font-bold text-navy group-hover:text-navy-dark truncate">
+                                {s.name}
+                              </p>
+                              <Badge
+                                variant={s.status === "ACTIVE" ? "default" : "destructive"}
+                                className={cn(
+                                  "text-[10px] px-1.5 py-0 h-4",
+                                  s.status === "ACTIVE" ? "bg-emerald hover:bg-emerald text-white" : ""
+                                )}
+                              >
+                                {s.status === "ACTIVE" ? "فعال" : "معلق"}
+                              </Badge>
+                            </div>
+                            <div className="flex items-center gap-2.5 text-xs text-muted-foreground mt-0.5 flex-wrap">
+                              <span dir="ltr" className="font-mono text-[11px] text-slate-500">
+                                {s.subdomain}.samik.app
+                              </span>
+                              {s.principal && (
+                                <span className="text-slate-600">
+                                  • مدیر: {s.principal.firstName} {s.principal.lastName}
+                                </span>
+                              )}
+                            </div>
                           </div>
                         </div>
+
                         <div className="flex items-center gap-3 shrink-0">
-                          <span className="text-xs text-muted-foreground tabular-nums hidden sm:inline">
-                            {format(new Date(s.createdAt), "yyyy/MM/dd", {
-                              locale: faIR,
-                            })}
-                          </span>
-                          <Badge
-                            variant={s.status === "ACTIVE" ? "default" : "destructive"}
-                            className={
-                              s.status === "ACTIVE"
-                                ? "bg-emerald hover:bg-emerald"
-                                : ""
-                            }
-                          >
-                            {s.status === "ACTIVE" ? "فعال" : "معلق"}
-                          </Badge>
+                          <div className="text-left hidden md:block">
+                            <div className="text-xs font-medium text-slate-700">
+                              {(s._count?.enrollments ?? 0).toLocaleString("fa-IR")} دانش‌آموز • {(s._count?.staffEmployments ?? 0).toLocaleString("fa-IR")} کادر
+                            </div>
+                            <div className="text-[10px] text-muted-foreground tabular-nums">
+                              ثبت: {toPersianDate(s.createdAt)}
+                            </div>
+                          </div>
+                          <div className="h-8 w-8 rounded-lg bg-slate-100 group-hover:bg-navy/10 text-slate-400 group-hover:text-navy flex items-center justify-center transition-colors">
+                            <ArrowLeft className="h-4 w-4 group-hover:-translate-x-0.5 transition-transform" />
+                          </div>
                         </div>
-                      </div>
+                      </Link>
                     ))}
                   </div>
                 )}
               </CardContent>
             </Card>
-          </ScrollReveal>
-
-          {/* Quick action card */}
-          <ScrollReveal delay={200}>
-            <Link
-              href="/super-admin/schools"
-              className="kpi-card rounded-xl border border-navy/20 bg-navy/5 hover:bg-navy/10 p-4 flex items-center justify-between gap-3 group"
-            >
-              <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-lg bg-navy/10 text-navy flex items-center justify-center">
-                  <ShieldCheck className="h-5 w-5" />
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-navy">
-                    آنبوردینگ مدرسهٔ جدید
-                  </p>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    ثبت مدرسهٔ جدید، تخصیص زیردامنه و لایسنس اولیه.
-                  </p>
-                </div>
-              </div>
-              <ArrowLeft className="h-5 w-5 text-navy/70 group-hover:translate-x-[-2px] transition-transform" />
-            </Link>
           </ScrollReveal>
         </>
       )}

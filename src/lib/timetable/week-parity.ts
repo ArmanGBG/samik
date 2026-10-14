@@ -22,6 +22,8 @@
  * The Principal UI will recommend picking the first Saturday.
  */
 
+import { TEHRAN_TIME_ZONE, zonedDateKeyFor } from "@/lib/timetable/tehran-time";
+
 export type WeekParity = "ODD_WEEKS" | "EVEN_WEEKS";
 
 export interface WeekParityResult {
@@ -61,7 +63,10 @@ export function calculateWeekParity(
     };
   }
 
-  const diffMs = now.getTime() - termStartDate.getTime();
+  const todayKey = zonedDateKeyFor(now);
+  const startKey = zonedDateKeyFor(termStartDate);
+  const diffDays = calendarDaysBetween(startKey, todayKey);
+  const diffMs = diffDays * MS_PER_DAY;
 
   if (diffMs < 0) {
     // Pre-term — parity still calculable but conceptually meaningless.
@@ -89,20 +94,43 @@ export function calculateWeekParity(
   };
 }
 
+/** Whole calendar days from `fromKey` to `toKey` (negative when `toKey` is earlier). */
+function calendarDaysBetween(fromKey: string, toKey: string): number {
+  const to = Date.parse(`${toKey}T00:00:00Z`);
+  const from = Date.parse(`${fromKey}T00:00:00Z`);
+  if (isNaN(to) || isNaN(from)) return 0;
+  return Math.round((to - from) / MS_PER_DAY);
+}
+
 /**
  * Decide whether a `TimetableSlot.weekType` matches the current parity.
  *
- *   ALL_WEEKS  → always matches
- *   ODD_WEEKS  → matches if current parity is ODD
- *   EVEN_WEEKS → matches if current parity is EVEN
+ *   ALL_WEEKS       → always matches
+ *   ODD_WEEKS       → matches if current parity is ODD
+ *   EVEN_WEEKS      → matches if current parity is EVEN
+ *   SINGLE_SESSION  → matches only on the slot's specificDate
  *
  * If the school has no termStartDate configured, ONLY ALL_WEEKS slots
  * match (we don't know the parity).
+ *
+ * @param todayKey "YYYY-MM-DD" for *today in the school timezone*, from
+ *                 `tehranDateKey()`. This is a string rather than a Date on
+ *                 purpose: comparing raw instants here mixed UTC calendar
+ *                 dates with the Tehran wall clock, which silently dropped
+ *                 SINGLE_SESSION slots for every school morning between
+ *                 00:00 and 03:30.
  */
 export function weekTypeMatches(
-  slotWeekType: "ALL_WEEKS" | "ODD_WEEKS" | "EVEN_WEEKS",
-  parityResult: WeekParityResult
+  slotWeekType: "ALL_WEEKS" | "ODD_WEEKS" | "EVEN_WEEKS" | "SINGLE_SESSION" | string,
+  parityResult: WeekParityResult,
+  slotSpecificDate: Date | null | undefined,
+  todayKey: string,
+  timeZone: string = TEHRAN_TIME_ZONE
 ): boolean {
+  if (slotWeekType === "SINGLE_SESSION") {
+    if (!slotSpecificDate) return false;
+    return zonedDateKeyFor(slotSpecificDate, timeZone) === todayKey;
+  }
   if (slotWeekType === "ALL_WEEKS") return true;
   if (parityResult.isUnconfigured) return false;
   return slotWeekType === parityResult.parity;

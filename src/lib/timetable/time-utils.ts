@@ -78,3 +78,64 @@ export function hhmmToPersian(t: string): string {
   const persianDigits = ["۰", "۱", "۲", "۳", "۴", "۵", "۶", "۷", "۸", "۹"];
   return t.replace(/\d/g, (d) => persianDigits[parseInt(d, 10)]);
 }
+
+/**
+ * Minutes before `startTime` at which a class is already considered live, so a
+ * teacher can open the roll-call slightly early (Section 5).
+ */
+export const DEFAULT_EARLY_TOLERANCE_MINUTES = 15;
+
+/**
+ * Minutes after `endTime` during which a class is still considered live, so a
+ * bell that rings a little late doesn't blank the dashboard mid-lesson.
+ */
+export const DEFAULT_LATE_TOLERANCE_MINUTES = 5;
+
+export interface SlotWindow {
+  startTime: string;
+  endTime: string;
+}
+
+export interface ActiveWindowOptions {
+  /** Wall-clock minutes since midnight, already resolved to the school timezone. */
+  minutesOfDay: number;
+  earlyToleranceMinutes?: number;
+  lateToleranceMinutes?: number;
+}
+
+/**
+ * The single source of truth for "is this timetable slot live right now?".
+ *
+ * Both the teacher dashboard and the deputy live dashboard call this, so the
+ * two panels can never drift apart again. `minutesOfDay` MUST come from
+ * `getZonedDateParts(...).minutesOfDay` — never from `Date.prototype.getHours()`,
+ * which reads the host timezone.
+ */
+export function isSlotActiveNow(
+  slot: SlotWindow,
+  options: ActiveWindowOptions
+): boolean {
+  const {
+    minutesOfDay,
+    earlyToleranceMinutes = DEFAULT_EARLY_TOLERANCE_MINUTES,
+    lateToleranceMinutes = DEFAULT_LATE_TOLERANCE_MINUTES,
+  } = options;
+
+  if (!HH_MM_REGEX.test(slot.startTime) || !HH_MM_REGEX.test(slot.endTime)) {
+    return false;
+  }
+
+  const startMin = hhmmToMinutes(slot.startTime);
+  const endMin = hhmmToMinutes(slot.endTime);
+
+  return (
+    minutesOfDay >= startMin - earlyToleranceMinutes &&
+    minutesOfDay < endMin + lateToleranceMinutes
+  );
+}
+
+/** Minutes elapsed since the bell rang, or negative if the bell is upcoming. */
+export function minutesSinceStart(slot: SlotWindow, minutesOfDay: number): number {
+  if (!HH_MM_REGEX.test(slot.startTime)) return 0;
+  return minutesOfDay - hhmmToMinutes(slot.startTime);
+}

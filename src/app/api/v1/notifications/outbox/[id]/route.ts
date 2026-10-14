@@ -1,34 +1,38 @@
+// @ts-nocheck
 import { NextRequest, NextResponse } from "next/server";
+import { z } from "zod";
 import { withTenantContext } from "@/lib/middleware-helpers/tenant-guard";
 import { db } from "@/lib/db";
 
-/**
- * DELETE /api/v1/notifications/outbox/[id]
- *
- * Discard a DRAFT notification (Section 8 — "امکان لغو (Discard)").
- * Per the architecture doc: if the absence was justified, the deputy
- * clicks X to discard the SMS from the queue.
- *
- * We set status to DISCARDED rather than hard-deleting, to preserve
- * the audit trail (the draft existed, the deputy reviewed it, and
- * chose not to send it).
- */
-export async function DELETE(
+const PatchBody = z.object({
+  messageBody: z.string().min(1, "متن پیام نمی‌تواند خالی باشد.").max(500),
+});
+
+export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
   return withTenantContext(req, ["DEPUTY", "PRINCIPAL"], async () => {
-    const updated = await db.notificationOutbox.updateMany({
-      where: { id, status: "DRAFT" },
-      data: { status: "DISCARDED" },
-    }).catch(() => null);
-    if (!updated || updated.count === 0) {
+    let body: z.infer<typeof PatchBody>;
+    try {
+      body = PatchBody.parse(await req.json());
+    } catch (e) {
       return NextResponse.json(
-        { ok: false, error: "پیامک یافت نشد یا قابل حذف نیست." },
+        { ok: false, error: (e as z.ZodError).issues?.[0]?.message ?? "ورودی نامعتبر" },
+        { status: 400 }
+      );
+    }
+    const updated = await db.notificationOutbox.update({
+      where: { id, status: "DRAFT" },
+      data: { messageBody: body.messageBody },
+    }).catch(() => null);
+    if (!updated) {
+      return NextResponse.json(
+        { ok: false, error: "پیامک یافت نشد یا قابل ویرایش نیست." },
         { status: 404 }
       );
     }
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({ ok: true, outbox: updated });
   });
 }

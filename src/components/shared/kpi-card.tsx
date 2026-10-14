@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ScrollReveal } from "./scroll-reveal";
@@ -22,6 +23,10 @@ interface KpiCardProps {
   };
   /** Optional sub-label (e.g. "از ماه گذشته") */
   sublabel?: string;
+  /** Optional link destination */
+  href?: string;
+  /** Optional click handler */
+  onClick?: () => void;
   /** Stagger delay for scroll reveal (ms) */
   delay?: number;
 }
@@ -85,63 +90,81 @@ export function KpiCard({
   tint = "navy",
   trend,
   sublabel,
+  href,
+  onClick,
   delay = 0,
 }: KpiCardProps) {
   const t = TINTS[tint];
+  const isInteractive = Boolean(href || onClick);
+
+  const cardContent = (
+    <div
+      onClick={onClick}
+      className={cn(
+        "kpi-card rounded-xl border p-4 flex items-center gap-3 transition-all",
+        t.bg,
+        isInteractive && "cursor-pointer hover:shadow-md hover:border-navy/40 group active:scale-[0.99]"
+      )}
+    >
+      {/* Icon */}
+      <div
+        className={cn(
+          "h-10 w-10 rounded-lg flex items-center justify-center shrink-0 transition-transform",
+          t.iconBg,
+          t.iconText,
+          isInteractive && "group-hover:scale-105"
+        )}
+      >
+        <Icon className="h-5 w-5" />
+      </div>
+
+      {/* Content */}
+      <div className="flex-1 min-w-0">
+        <p className={cn("text-xs text-muted-foreground truncate", isInteractive && "group-hover:text-foreground transition-colors")}>
+          {label}
+        </p>
+        <div className="flex items-baseline gap-1.5 mt-0.5">
+          <span
+            className={cn(
+              "text-2xl font-bold tabular-nums leading-none",
+              t.text
+            )}
+          >
+            {typeof value === "number"
+              ? value.toLocaleString("fa-IR")
+              : value}
+          </span>
+          {trend && (
+            <span
+              className={cn(
+                "text-xs font-medium tabular-nums",
+                trend.direction === "up" && "text-emerald",
+                trend.direction === "down" && "text-destructive",
+                trend.direction === "neutral" && "text-muted-foreground"
+              )}
+            >
+              {TREND_ICONS[trend.direction]} {trend.value}
+            </span>
+          )}
+        </div>
+        {sublabel && (
+          <p className="text-[10px] text-muted-foreground/70 mt-0.5 truncate">
+            {sublabel}
+          </p>
+        )}
+      </div>
+    </div>
+  );
 
   return (
     <ScrollReveal delay={delay}>
-      <div
-        className={cn(
-          "kpi-card rounded-xl border p-4 flex items-center gap-3",
-          t.bg
-        )}
-      >
-        {/* Icon */}
-        <div
-          className={cn(
-            "h-10 w-10 rounded-lg flex items-center justify-center shrink-0",
-            t.iconBg,
-            t.iconText
-          )}
-        >
-          <Icon className="h-5 w-5" />
-        </div>
-
-        {/* Content */}
-        <div className="flex-1 min-w-0">
-          <p className="text-xs text-muted-foreground truncate">{label}</p>
-          <div className="flex items-baseline gap-1.5 mt-0.5">
-            <span
-              className={cn(
-                "text-2xl font-bold tabular-nums leading-none",
-                t.text
-              )}
-            >
-              {typeof value === "number"
-                ? value.toLocaleString("fa-IR")
-                : value}
-            </span>
-            {trend && (
-              <span
-                className={cn(
-                  "text-xs font-medium tabular-nums",
-                  trend.direction === "up" && "text-emerald",
-                  trend.direction === "down" && "text-destructive",
-                  trend.direction === "neutral" && "text-muted-foreground"
-                )}
-              >
-                {TREND_ICONS[trend.direction]} {trend.value}
-              </span>
-            )}
-          </div>
-          {sublabel && (
-            <p className="text-[10px] text-muted-foreground/70 mt-0.5 truncate">
-              {sublabel}
-            </p>
-          )}
-        </div>
-      </div>
+      {href ? (
+        <Link href={href} className="block h-full outline-none focus-visible:ring-2 focus-visible:ring-navy/40 rounded-xl">
+          {cardContent}
+        </Link>
+      ) : (
+        cardContent
+      )}
     </ScrollReveal>
   );
 }
@@ -152,12 +175,15 @@ export function KpiCard({
  */
 export function KpiCardGrid({
   cards,
+  items,
 }: {
-  cards: Omit<KpiCardProps, "delay">[];
+  cards?: Omit<KpiCardProps, "delay">[];
+  items?: Omit<KpiCardProps, "delay">[];
 }) {
+  const list = cards ?? items ?? [];
   return (
     <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-      {cards.map((card, i) => (
+      {list.map((card, i) => (
         <KpiCard key={i} {...card} delay={i * 60} />
       ))}
     </div>

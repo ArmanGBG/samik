@@ -5,7 +5,14 @@ import { db } from "@/lib/db";
 
 const AddStaffBody = z.object({
   phone: z.string().regex(/^09\d{9}$/, "شماره موبایل باید با ۰۹ شروع و ۱۱ رقم باشد."),
-  nationalCode: z.string().regex(/^\d{10}$/, "کد ملی باید ۱۰ رقم باشد."),
+  nationalCode: z
+    .string()
+    .trim()
+    .refine((val) => !val || /^\d{10}$/.test(val) || val.startsWith("TEMP-"), {
+      message: "کد ملی باید ۱۰ رقم باشد.",
+    })
+    .optional()
+    .or(z.literal("")),
   firstName: z.string().min(1, "نام الزامی است."),
   lastName: z.string().min(1, "نام خانوادگی الزامی است."),
   role: z.enum(["DEPUTY", "TEACHER"], {
@@ -61,12 +68,19 @@ export async function GET(req: NextRequest) {
         userId: e.user.id,
         firstName: e.user.firstName,
         lastName: e.user.lastName,
-        fullName: `${e.user.firstName} ${e.user.lastName}`,
+        fullName: `${e.user.firstName} ${e.user.lastName}`.trim(),
         phoneNumber: e.user.phoneNumber,
         nationalCode: e.user.nationalCode,
         role: e.role,
         slotCount: slotCountMap.get(e.userId) ?? 0,
         createdAt: e.createdAt,
+        user: {
+          id: e.user.id,
+          firstName: e.user.firstName,
+          lastName: e.user.lastName,
+          phoneNumber: e.user.phoneNumber,
+          nationalCode: e.user.nationalCode,
+        },
       })),
     });
   });
@@ -100,29 +114,68 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    const rawNc = body.nationalCode?.trim();
+    const finalNationalCode = rawNc && rawNc.length > 0
+      ? rawNc
+      : `TEMP-T-${Date.now().toString().slice(-6)}${Math.floor(1000 + Math.random() * 9000)}`;
+
     // Find or create the user (by phone — global unique)
     let user = await db.user.findUnique({
       where: { phoneNumber: body.phone },
     });
     if (!user) {
+      if (rawNc && !rawNc.startsWith("TEMP-")) {
+        const ncOwner = await db.user.findUnique({
+          where: { nationalCode: rawNc },
+          select: { id: true },
+        });
+        if (ncOwner) {
+          return NextResponse.json(
+            {
+              ok: false,
+              error: "این کد ملی قبلاً برای کاربر دیگری در سیستم ثبت شده است.",
+            },
+            { status: 409 }
+          );
+        }
+      }
+
       user = await db.user.create({
         data: {
           phoneNumber: body.phone,
-          nationalCode: body.nationalCode,
+          nationalCode: finalNationalCode,
           firstName: body.firstName,
           lastName: body.lastName,
         },
       });
     } else {
-      // If user exists but with a different national code → block (identity mismatch)
-      if (user.nationalCode !== body.nationalCode) {
-        return NextResponse.json(
-          {
-            ok: false,
-            error: "این شماره موبایل قبلاً با کد ملی متفاوتی ثبت شده است.",
-          },
-          { status: 409 }
-        );
+      // If user exists:
+      // If manager provided a real national code and user has a TEMP code, update user's national code
+      if (rawNc && !rawNc.startsWith("TEMP-")) {
+        if (user.nationalCode.startsWith("TEMP-") || user.nationalCode.startsWith("PENDING-")) {
+          const ncOwner = await db.user.findUnique({
+            where: { nationalCode: rawNc },
+            select: { id: true },
+          });
+          if (ncOwner && ncOwner.id !== user.id) {
+            return NextResponse.json(
+              { ok: false, error: "این کد ملی قبلاً برای کاربر دیگری ثبت شده است." },
+              { status: 409 }
+            );
+          }
+          user = await db.user.update({
+            where: { id: user.id },
+            data: { nationalCode: rawNc },
+          });
+        } else if (user.nationalCode !== rawNc) {
+          return NextResponse.json(
+            {
+              ok: false,
+              error: "این شماره موبایل قبلاً با کد ملی متفاوتی ثبت شده است.",
+            },
+            { status: 409 }
+          );
+        }
       }
     }
 
@@ -168,6 +221,13 @@ export async function POST(req: NextRequest) {
           role: employment.role,
           slotCount: 0,
           createdAt: employment.createdAt,
+          user: {
+            id: employment.user.id,
+            firstName: employment.user.firstName,
+            lastName: employment.user.lastName,
+            phoneNumber: employment.user.phoneNumber,
+            nationalCode: employment.user.nationalCode,
+          },
         },
       },
       { status: 201 }
@@ -240,7 +300,14 @@ const PatchStaffBody = z.object({
   firstName: z.string().min(1).optional(),
   lastName: z.string().min(1).optional(),
   phoneNumber: z.string().regex(/^09\d{9}$/).optional(),
-  nationalCode: z.string().regex(/^\d{10}$/).optional(),
+  nationalCode: z
+    .string()
+    .trim()
+    .refine((val) => !val || /^\d{10}$/.test(val) || val.startsWith("TEMP-"), {
+      message: "کد ملی باید ۱۰ رقم باشد.",
+    })
+    .optional()
+    .or(z.literal("")),
   role: z.enum(["DEPUTY", "TEACHER"]).optional(),
 });
 
@@ -312,9 +379,10 @@ export async function PATCH(req: NextRequest) {
       }
 
       // If nationalCode is changing, check for conflicts
-      if (body.nationalCode) {
+      const patchNc = body.nationalCode?.trim();
+      if (patchNc) {
         const existingNc = await db.user.findUnique({
-          where: { nationalCode: body.nationalCode },
+          where: { nationalCode: patchNc },
           select: { id: true },
         });
         if (existingNc && existingNc.id !== employment.userId) {
@@ -330,7 +398,7 @@ export async function PATCH(req: NextRequest) {
       if (body.firstName) userUpdate.firstName = body.firstName;
       if (body.lastName) userUpdate.lastName = body.lastName;
       if (body.phoneNumber) userUpdate.phoneNumber = body.phoneNumber;
-      if (body.nationalCode) userUpdate.nationalCode = body.nationalCode;
+      if (patchNc) userUpdate.nationalCode = patchNc;
 
       if (Object.keys(userUpdate).length > 0) {
         await db.user.update({
@@ -370,6 +438,13 @@ export async function PATCH(req: NextRequest) {
           role: updated!.role,
           slotCount: 0, // recalculated on next GET
           createdAt: updated!.createdAt,
+          user: {
+            id: updated!.user.id,
+            firstName: updated!.user.firstName,
+            lastName: updated!.user.lastName,
+            phoneNumber: updated!.user.phoneNumber,
+            nationalCode: updated!.user.nationalCode,
+          },
         },
       });
     } catch (err) {

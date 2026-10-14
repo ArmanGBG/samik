@@ -14,6 +14,7 @@ export type ProfileEntry = {
   role: string;
   studentEnrollmentId?: string;
   label: string;
+  status?: "ACTIVE" | "PENDING_CONFIRMATION" | "ARCHIVED";
 };
 
 type SessionState =
@@ -35,6 +36,8 @@ type SessionState =
       schoolId: string;
       schoolName: string;
       role: string;
+      studentEnrollmentId?: string;
+      profiles: ProfileEntry[];
     };
 
 interface AuthStore {
@@ -76,9 +79,11 @@ export const useAuth = create<AuthStore>((set) => ({
             userId: data.user.id,
             firstName: data.user.firstName,
             lastName: data.user.lastName,
-            schoolId: data.school.id,
-            schoolName: data.school.name,
+            schoolId: data.school?.id ?? "",
+            schoolName: data.school?.name ?? "",
             role: data.role,
+            studentEnrollmentId: data.studentEnrollmentId,
+            profiles: data.profiles ?? [],
           },
         });
       }

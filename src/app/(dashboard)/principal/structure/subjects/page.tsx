@@ -1,7 +1,7 @@
-import { SubjectsManager } from "@/components/dashboard/subjects-manager";
+import { SchoolDetailsManager } from "@/components/dashboard/school-details-manager";
 
-export const metadata = { title: "دروس | سامیک" };
+export const metadata = { title: "مدیریت دروس | سامیک" };
 
 export default function SubjectsPage() {
-  return <SubjectsManager />;
+  return <SchoolDetailsManager isPrincipal={true} defaultTab="timetable" defaultSubTab="subjects" />;
 }

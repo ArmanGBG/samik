@@ -52,9 +52,9 @@ export function PageHeader({
             {title}
           </h1>
           {subtitle && (
-            <p className="text-sm text-muted-foreground mt-0.5 leading-relaxed">
+            <div className="text-sm text-muted-foreground mt-0.5 leading-relaxed">
               {subtitle}
-            </p>
+            </div>
           )}
         </div>
       </div>

@@ -34,7 +34,7 @@ export async function POST(req: NextRequest) {
     body = Body.parse(await req.json());
   } catch (e) {
     return NextResponse.json(
-      { ok: false, error: (e as z.ZodError).errors?.[0]?.message ?? "ورودی نامعتبر" },
+      { ok: false, error: (e as z.ZodError).issues?.[0]?.message ?? "ورودی نامعتبر" },
       { status: 400 }
     );
   }
@@ -56,17 +56,16 @@ export async function POST(req: NextRequest) {
           console.error("[otp] SMS send failed:", err);
         });
 
+      const isSimulated = getSmsProvider().name === "simulated";
       return NextResponse.json({
         ok: true,
         expiresInMs,
         // Dev convenience: surface the OTP so the user can paste it
-        // from the toast. In prod, `code` is null (the OTP is only
-        // sent via real SMS — never returned to the client).
-        devCode: process.env.NODE_ENV === "development" ? code : null,
-        message:
-          process.env.NODE_ENV === "development"
-            ? `کد یک‌بار مصرف (محیط توسعه): ${code}`
-            : "کد یک‌بار مصرف ارسال شد. لطفاً صبر کنید.",
+        // from the toast if we are using the simulated provider (even in production).
+        devCode: isSimulated ? code : null,
+        message: isSimulated
+            ? `کد تستی سامیک: ${code}`
+            : "کد یک‌بار مصرف ارسال شد. لطفاً پیامک خود را چک کنید.",
       });
     }
 

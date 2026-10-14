@@ -59,6 +59,7 @@ enum WeekType {
   ALL_WEEKS
   ODD_WEEKS
   EVEN_WEEKS
+  SINGLE_SESSION
 }
 
 enum ClassSessionStatus {
@@ -259,6 +260,8 @@ model Subject {
 
   school         School          @relation(fields: [schoolId], references: [id], onDelete: Cascade)
   timetableSlots TimetableSlot[]
+  assessments    Assessment[]
+  behavioralPoints BehavioralPoint[]
 
   @@index([schoolId])
 }
@@ -272,6 +275,8 @@ model TimetableSlot {
   bellScheduleId String
   dayOfWeek      Int
   weekType       WeekType @default(ALL_WEEKS)
+  /// Only set for SINGLE_SESSION slots: the single calendar date it applies to.
+  specificDate   DateTime?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
@@ -331,6 +336,9 @@ model Assessment {
   id              String         @id @default(uuid())
   schoolId        String
   classRoomId     String
+  /// REQUIRED. Every assessment belongs to exactly one subject, so grades for
+  /// two subjects taught in the same class can never share a row.
+  subjectId       String
   teacherUserId   String
   title           String
   evaluationType  EvaluationType
@@ -340,10 +348,11 @@ model Assessment {
 
   school     School     @relation(fields: [schoolId], references: [id], onDelete: Cascade)
   classRoom  ClassRoom  @relation(fields: [classRoomId], references: [id], onDelete: Restrict)
+  subject    Subject    @relation(fields: [subjectId], references: [id], onDelete: Restrict)
   teacher    User       @relation(fields: [teacherUserId], references: [id], onDelete: Restrict)
   grades     Grade[]
 
-  @@index([schoolId, classRoomId, date])
+  @@index([schoolId, classRoomId, subjectId, date])
 }
 
 model Grade {
@@ -370,6 +379,9 @@ model BehavioralPoint {
   schoolId       String
   studentUserId  String
   teacherUserId  String
+  /// REQUIRED. A behavioural point is attributed to one subject, so a point
+  /// given during one lesson never counts toward another subject's gradebook.
+  subjectId      String
   classSessionId String?
   pointType      PointType
   reasonTag      String?
@@ -378,9 +390,10 @@ model BehavioralPoint {
   school       School        @relation(fields: [schoolId], references: [id], onDelete: Cascade)
   student      User          @relation("PointsForStudent", fields: [studentUserId], references: [id], onDelete: Restrict)
   teacher      User          @relation("PointsByTeacher", fields: [teacherUserId], references: [id], onDelete: Restrict)
+  subject      Subject       @relation(fields: [subjectId], references: [id], onDelete: Restrict)
   classSession ClassSession? @relation(fields: [classSessionId], references: [id], onDelete: SetNull)
 
-  @@index([schoolId, studentUserId, createdAt])
+  @@index([schoolId, studentUserId, subjectId, createdAt])
 }
 
 // ============================================================

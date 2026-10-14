@@ -40,19 +40,21 @@ export async function withTenantContext<T>(
   if (!userId || !schoolId || !role) {
     return unauthorizedResponse() as unknown as T;
   }
+
+  // SuperAdmin has top-level authority over all tenants and roles
+  if (role === "SUPER_ADMIN") {
+    const targetSchoolId = req.nextUrl.searchParams.get("schoolId") || req.headers.get("x-target-school-id") || (schoolId !== "__global__" ? schoolId : null);
+    return runWithTenant({ userId, schoolId: targetSchoolId, role: "SUPER_ADMIN", bypassTenantFilter: !targetSchoolId }, () =>
+      handler({ userId, schoolId: targetSchoolId ?? "", role: "SUPER_ADMIN", enrollmentId })
+    );
+  }
+
   if (!allowedRoles.includes(role)) {
     return forbiddenResponse("نقش شما برای این عملیات کافی نیست.") as unknown as T;
   }
 
   try {
-    // Deep Tenant Guard: for SUPER_ADMIN, skip school-active check
     return await runWithTenant({ userId, schoolId, role, bypassTenantFilter: false }, async () => {
-      if (role === "SUPER_ADMIN") {
-        // SuperAdmin has no tenant scope. Run handler with bypass.
-        return runWithTenant({ userId, schoolId: null, role, bypassTenantFilter: true }, () =>
-          handler({ userId, schoolId, role })
-        );
-      }
 
       let school, employment;
       try {

@@ -20,6 +20,7 @@ import {
   School,
   Users,
   CalendarClock,
+  CalendarRange,
   ClipboardCheck,
   BookOpen,
   Bell,
@@ -47,26 +48,29 @@ interface NavItem {
 }
 
 const NAV: NavItem[] = [
-  { href: "overview", label: "داشبورد", icon: LayoutDashboard },
+  { href: "", label: "داشبورد", icon: LayoutDashboard, roles: ["SUPER_ADMIN", "PRINCIPAL", "DEPUTY", "TEACHER", "STUDENT"] },
   // SuperAdmin
   { href: "schools", label: "مدارس", icon: School, roles: ["SUPER_ADMIN"] },
-  // Principal
-  // Principal structure (also accessible by Deputy for classroom/subject/bell management)
+
+  // Core Management (Principal & SuperAdmin)
+  { href: "staff", label: "کادر و پرسنل", icon: Users, roles: ["SUPER_ADMIN", "PRINCIPAL"] },
+  { href: "students", label: "دانش‌آموزان", icon: GraduationCap, roles: ["SUPER_ADMIN", "PRINCIPAL"] },
   { href: "structure/classrooms", label: "کلاس‌ها", icon: DoorClosed, roles: ["PRINCIPAL", "DEPUTY"], routePrefix: "/principal" },
-  { href: "structure/subjects", label: "دروس", icon: BookOpen, roles: ["PRINCIPAL", "DEPUTY"], routePrefix: "/principal" },
-  { href: "structure/bell-schedules", label: "زنگ‌ها", icon: Clock, roles: ["PRINCIPAL", "DEPUTY"], routePrefix: "/principal" },
+  { href: "timetable", label: "برنامه هفتگی و زنگ‌ها", icon: CalendarClock, roles: ["PRINCIPAL"], routePrefix: "/principal" },
+  { href: "timetable", label: "برنامه هفتگی", icon: CalendarClock, roles: ["DEPUTY"], routePrefix: "/deputy" },
+
+  // Deputy-specific standalone structure links
+  { href: "structure/subjects", label: "دروس", icon: BookOpen, roles: ["DEPUTY"], routePrefix: "/principal" },
+  { href: "structure/bell-schedules", label: "زنگ‌ها", icon: Clock, roles: ["DEPUTY"], routePrefix: "/principal" },
+
+  // Configuration & Operations
   { href: "structure/term", label: "سال تحصیلی", icon: CalendarClock, roles: ["PRINCIPAL", "DEPUTY"], routePrefix: "/principal" },
-  { href: "staff", label: "پرسنل", icon: Users, roles: ["PRINCIPAL"] },
-  { href: "students", label: "دانش‌آموزان", icon: GraduationCap, roles: ["PRINCIPAL"] },
-  // Deputy (also accessible by Principal — Principal inherits Deputy access)
-  { href: "timetable", label: "برنامه هفتگی", icon: CalendarClock, roles: ["PRINCIPAL", "DEPUTY"], routePrefix: "/deputy" },
   { href: "live-attendance", label: "حضور و غیاب زنده", icon: ClipboardCheck, roles: ["PRINCIPAL", "DEPUTY"], routePrefix: "/deputy" },
   { href: "notifications", label: "کارتابل پیامک", icon: Bell, roles: ["PRINCIPAL", "DEPUTY"], routePrefix: "/deputy" },
+
   // Teacher
-  { href: "attendance", label: "حضور و غیاب کلاس", icon: ClipboardCheck, roles: ["TEACHER"] },
   { href: "gradebook", label: "دفتر نمره", icon: BookOpen, roles: ["TEACHER"] },
-  // Student
-  { href: "", label: "داشبورد", icon: LayoutDashboard, roles: ["STUDENT"] },
+  { href: "timetable", label: "برنامه هفتگی", icon: CalendarRange, roles: ["TEACHER"] },
 ];
 
 const ROLE_LABEL: Record<string, string> = {

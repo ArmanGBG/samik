@@ -32,6 +32,7 @@ import {
   Users,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { toPersianTime } from "@/lib/date-utils";
 import { hhmmToPersian } from "@/lib/timetable/time-utils";
 import { PageHeader } from "@/components/shared/page-header";
 import { KpiCardGrid } from "@/components/shared/kpi-card";
@@ -46,7 +47,7 @@ interface AbsenteeEntry {
   subjectTitle: string;
   teacherName: string;
   submittedAt: string;
-  status: "ABSENT" | "LATE" | "EXCUSED";
+  status: "ABSENT";
   guardianPhone?: string;
   classSessionId?: string;
   schoolId: string;
@@ -79,7 +80,7 @@ type SSEEvent =
           studentId: string;
           studentName: string;
           guardianPhone?: string;
-          status: "ABSENT" | "LATE";
+          status: "ABSENT";
         }>;
       };
     }
@@ -90,6 +91,7 @@ type SSEEvent =
     };
 
 interface PendingClass {
+  slotId: string;
   classroomName: string;
   subjectTitle: string;
   teacherName: string;
@@ -97,6 +99,7 @@ interface PendingClass {
   startTime: string;
   endTime: string;
   minutesSinceStart: number;
+  hasSubmittedAttendance: boolean;
 }
 
 export function DeputyLiveDashboard() {
@@ -108,40 +111,19 @@ export function DeputyLiveDashboard() {
   const eventSourceRef = useRef<EventSource | null>(null);
   const reconnectTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Load pending classes (computed from timetable + current time)
+  // Load pending classes. The active-class decision is made on the SERVER in
+  // the school's timezone (with week parity applied) so this panel can never
+  // disagree with the teacher dashboard. It used to be computed here from the
+  // visitor's browser clock while ignoring `weekType` entirely.
   const loadPendingClasses = useCallback(async () => {
     setLoadingPending(true);
     try {
-      const r = await fetch("/api/v1/deputy/timetable");
+      const r = await fetch("/api/v1/deputy/active-classes", { cache: "no-store" });
       const d = await r.json();
       if (!d.ok) return;
-
-      // Find slots that should be active right now (current time within bell range)
-      const now = new Date();
-      const nowMin = now.getHours() * 60 + now.getMinutes();
-      const todaySamikDay = (now.getDay() + 1) % 7; // Saturday=0..Friday=6
-
-      const active: PendingClass[] = [];
-      for (const slot of d.slots) {
-        if (slot.dayOfWeek !== todaySamikDay) continue;
-        const [sh, sm] = slot.bellSchedule.startTime.split(":").map(Number);
-        const [eh, em] = slot.bellSchedule.endTime.split(":").map(Number);
-        const startMin = sh * 60 + sm;
-        const endMin = eh * 60 + em;
-        // Active if now is between start and end
-        if (nowMin >= startMin && nowMin < endMin) {
-          active.push({
-            classroomName: `${slot.classRoom.gradeLevel} ${slot.classRoom.name}`,
-            subjectTitle: slot.subject.title,
-            teacherName: `${slot.teacher.firstName} ${slot.teacher.lastName}`,
-            bellTitle: slot.bellSchedule.title,
-            startTime: slot.bellSchedule.startTime,
-            endTime: slot.bellSchedule.endTime,
-            minutesSinceStart: nowMin - startMin,
-          });
-        }
-      }
-      setPendingClasses(active);
+      setPendingClasses(d.activeClasses ?? []);
+      if (d.initialAbsentees) setAbsentees(d.initialAbsentees);
+      if (d.initialBehavioral) setBehavioral(d.initialBehavioral);
     } catch (err) {
       console.error("[LOAD_PENDING_CLASSES_ERROR]", err);
     } finally {
@@ -188,9 +170,10 @@ export function DeputyLiveDashboard() {
               schoolId: event.schoolId,
             })
           );
-          if (newAbsentees.length > 0) {
-            setAbsentees((prev) => [newAbsentees[0], ...newAbsentees.slice(1), ...prev].slice(0, 50));
-          }
+          setAbsentees((prev) => {
+            const filtered = prev.filter(a => a.classSessionId !== event.payload.classSessionId);
+            return [...newAbsentees, ...filtered].slice(0, 50);
+          });
           // Show toast
           toast.success(
             `حضور و غیاب ${event.payload.classroomName} ثبت شد (${newAbsentees.length} غایب/تاخیری)`,
@@ -202,9 +185,7 @@ export function DeputyLiveDashboard() {
         if (event.type === "behavioral-point:created") {
           setBehavioral((prev) => [event.payload, ...prev].slice(0, 50));
         }
-        if (event.type === "attendance:excused") {
-          setAbsentees((prev) => prev.filter((a) => a.studentId !== event.payload.studentId));
-        }
+        
       } catch {
         // ignore malformed events (e.g. heartbeat comments)
       }
@@ -223,10 +204,13 @@ export function DeputyLiveDashboard() {
     };
   }, [connectSSE, loadPendingClasses]);
 
+  const unsubmittedClasses = pendingClasses.filter((c) => !c.hasSubmittedAttendance);
+  const submittedClasses = pendingClasses.filter((c) => c.hasSubmittedAttendance);
+
   const stats = {
-    pendingCount: pendingClasses.length,
+    pendingCount: unsubmittedClasses.length,
+    submittedCount: submittedClasses.length,
     absenteesCount: absentees.length,
-    lateCount: absentees.filter((a) => a.status === "LATE").length,
     positivePoints: behavioral.filter((b) => b.pointType === "POSITIVE").length,
     negativePoints: behavioral.filter((b) => b.pointType === "NEGATIVE").length,
   };
@@ -269,10 +253,10 @@ export function DeputyLiveDashboard() {
       <KpiCardGrid
         cards={[
           {
-            label: "کلاس‌های در حال برگزاری",
+            label: "کلاس‌های در انتظار ثبت",
             value: stats.pendingCount,
             icon: Clock,
-            tint: "info",
+            tint: stats.pendingCount > 0 ? "warning" : "emerald",
           },
           {
             label: "غایبین امروز",
@@ -297,19 +281,19 @@ export function DeputyLiveDashboard() {
 
       {/* Two-column layout */}
       <div className="grid lg:grid-cols-2 gap-6">
-        {/* Pending Classes */}
+        {/* Active & Pending Classes */}
         <ScrollReveal delay={120}>
           <Card className="h-full">
             <CardHeader className="pb-3">
               <CardTitle className="text-base text-navy flex items-center gap-2">
                 <Clock className="h-4 w-4" />
-                کلاس‌های در حال برگزاری
+                کلاس‌های زنگ جاری
                 <Badge variant="outline" className="text-xs mr-1 tabular-nums">
-                  {pendingClasses.length.toLocaleString("fa-IR")}
+                  {unsubmittedClasses.length.toLocaleString("fa-IR")} در انتظار / {pendingClasses.length.toLocaleString("fa-IR")} کل
                 </Badge>
               </CardTitle>
               <CardDescription>
-                کلاس‌هایی که زنگ آن‌ها شروع شده اما هنوز ثبت نهایی نشده‌اند.
+                کلاس‌های در حال برگزاری بر اساس ساعت زنگ و وضعیت ثبت حضور و غیاب توسط معلمان.
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -330,15 +314,28 @@ export function DeputyLiveDashboard() {
                       key={`${c.classroomName}-${c.bellTitle}-${i}`}
                       className={cn(
                         "stagger-item flex items-center gap-3 p-3 rounded-lg border",
-                        c.minutesSinceStart > 10
+                        c.hasSubmittedAttendance
+                          ? "border-emerald/30 bg-emerald/5"
+                          : c.minutesSinceStart > 10
                           ? "border-warning/30 bg-warning/5"
                           : "border-border"
                       )}
                       style={{ animationDelay: `${i * 30}ms` }}
                     >
                       <div className="flex-1 min-w-0">
-                        <div className="font-medium text-sm">
-                          {c.classroomName} — {c.subjectTitle}
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium text-sm">
+                            {c.classroomName} — {c.subjectTitle}
+                          </span>
+                          {c.hasSubmittedAttendance ? (
+                            <Badge variant="outline" className="text-[10px] bg-emerald/10 text-emerald border-emerald/30 font-medium">
+                              ثبت‌شده ✓
+                            </Badge>
+                          ) : (
+                            <Badge variant="outline" className="text-[10px] bg-warning/10 text-warning border-warning/30 font-medium">
+                              در انتظار ثبت
+                            </Badge>
+                          )}
                         </div>
                         <div className="text-xs text-muted-foreground mt-0.5">
                           {c.teacherName} • {c.bellTitle}
@@ -351,12 +348,16 @@ export function DeputyLiveDashboard() {
                         <div
                           className={cn(
                             "text-xs font-bold tabular-nums",
-                            c.minutesSinceStart > 10
+                            c.hasSubmittedAttendance
+                              ? "text-emerald"
+                              : c.minutesSinceStart > 10
                               ? "text-warning"
                               : "text-muted-foreground"
                           )}
                         >
-                          {c.minutesSinceStart.toLocaleString("fa-IR")} دقیقه
+                          {c.hasSubmittedAttendance
+                            ? "ثبت نهایی شد"
+                            : `${c.minutesSinceStart.toLocaleString("fa-IR")} دقیقه`}
                         </div>
                       </div>
                     </div>
@@ -396,14 +397,7 @@ export function DeputyLiveDashboard() {
                       key={a.id}
                       absentee={a}
                       index={i}
-                      onExcuse={(excusedId) => {
-                        setAbsentees((prev) =>
-                          prev.map((item) =>
-                            item.id === excusedId ? { ...item, status: "EXCUSED" } : item
-                          )
-                        );
-                      }}
-                    />
+                      />
                   ))}
                 </div>
               )}
@@ -482,63 +476,30 @@ function AbsenteeRow({
   onExcuse?: (id: string) => void;
 }) {
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [excusing, setExcusing] = useState(false);
+  
 
-  const handleExcuse = async () => {
-    setExcusing(true);
-    try {
-      const res = await fetch("/api/v1/deputy/attendance/excuse", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          studentId: absentee.studentId,
-          classSessionId: absentee.classSessionId,
-        }),
-      });
-      const data = await res.json();
-      if (!data.ok) {
-        toast.error(data.error || "خطا در توجیه غیبت");
-        return;
-      }
-      toast.success("غیبت دانش‌آموز موجه شد و پیامک از کارتابل لغو گردید.");
-      setDrawerOpen(false);
-      onExcuse?.(absentee.id);
-    } catch {
-      toast.error("خطا در برقراری ارتباط با سرور");
-    } finally {
-      setExcusing(false);
-    }
-  };
-
+  
   return (
     <Sheet open={drawerOpen} onOpenChange={setDrawerOpen}>
       <div
         className={cn(
           "stagger-item flex items-center gap-3 p-3 rounded-lg border",
-          absentee.status === "EXCUSED"
-            ? "border-info/20 bg-info/5"
-            : absentee.status === "ABSENT"
-            ? "border-destructive/20 bg-destructive/5"
-            : "border-warning/20 bg-warning/5"
+          "border-destructive/20 bg-destructive/5"
         )}
         style={{ animationDelay: `${index * 30}ms` }}
       >
         <div
           className={cn(
             "h-2 w-2 rounded-full shrink-0",
-            absentee.status === "EXCUSED"
-              ? "bg-info"
-              : absentee.status === "ABSENT"
-              ? "bg-destructive"
-              : "bg-warning"
+            "bg-destructive"
           )}
         />
         <div className="flex-1 min-w-0">
           <div className="font-medium text-sm">{absentee.studentName}</div>
           <div className="text-xs text-muted-foreground mt-0.5">
             {absentee.classroomName} • {absentee.subjectTitle} •{" "}
-            <span dir="ltr" className="tabular-nums font-mono">
-              {new Date(absentee.submittedAt).toLocaleTimeString("fa-IR")}
+            <span className="tabular-nums font-mono">
+              {toPersianTime(absentee.submittedAt)}
             </span>
           </div>
         </div>
@@ -546,18 +507,10 @@ function AbsenteeRow({
           variant="outline"
           className={cn(
             "text-xs",
-            absentee.status === "EXCUSED"
-              ? "bg-info/10 text-info border-info/30"
-              : absentee.status === "ABSENT"
-              ? "bg-destructive/10 text-destructive"
-              : "bg-warning/10 text-warning"
+            "bg-destructive/10 text-destructive border-destructive/30"
           )}
         >
-          {absentee.status === "EXCUSED"
-            ? "موجه"
-            : absentee.status === "ABSENT"
-            ? "غایب"
-            : "تاخیر"}
+          {"غایب"}
         </Badge>
         <SheetTrigger asChild>
           <Button
@@ -589,18 +542,10 @@ function AbsenteeRow({
             <Badge
               className={cn(
                 "mt-1 font-medium",
-                absentee.status === "EXCUSED"
-                  ? "bg-info text-white"
-                  : absentee.status === "ABSENT"
-                  ? "bg-destructive text-white"
-                  : "bg-warning text-white"
+                "bg-destructive text-white"
               )}
             >
-              {absentee.status === "EXCUSED"
-                ? "غیبت موجه"
-                : absentee.status === "ABSENT"
-                ? "غایب غیرموجه"
-                : "تاخیر ورود"}
+              {"غایب"}
             </Badge>
           </div>
           {absentee.guardianPhone ? (
@@ -622,26 +567,7 @@ function AbsenteeRow({
               شماره ولی ثبت نشده است
             </Button>
           )}
-          <Button
-            variant="outline"
-            className="w-full cursor-pointer hover:bg-amber-50 hover:text-amber-800 hover:border-amber-300 gap-2"
-            disabled={excusing || absentee.status === "EXCUSED"}
-            onClick={handleExcuse}
-          >
-            {excusing ? (
-              <>
-                <Loader2 className="h-4 w-4 animate-spin" />
-                در حال ثبت موجه‌سازی...
-              </>
-            ) : absentee.status === "EXCUSED" ? (
-              <>
-                <CheckCircle2 className="h-4 w-4 text-emerald" />
-                غیبت قبلاً موجه شده است
-              </>
-            ) : (
-              "تأیید و موجه‌سازی غیبت دانش‌آموز"
-            )}
-          </Button>
+          
         </div>
       </SheetContent>
     </Sheet>

@@ -1,7 +1,7 @@
-import { StudentsManager } from "@/components/dashboard/students-manager";
+import { SchoolDetailsManager } from "@/components/dashboard/school-details-manager";
 
-export const metadata = { title: "دانش‌آموزان | سامیک" };
+export const metadata = { title: "مدیریت دانش‌آموزان | سامیک" };
 
 export default function PrincipalStudentsPage() {
-  return <StudentsManager />;
+  return <SchoolDetailsManager isPrincipal={true} defaultTab="students" />;
 }

@@ -52,3 +52,20 @@ prompt
 server.log
 # Skills directory
 /skills/
+
+# scratch and test scripts
+fix_*.js
+patch_*.js
+test_*.js
+test_*.mjs
+test_*.ts
+view_*.js
+extract_*.js
+rewrite_*.js
+move_*.js
+use_*.js
+update_*.js
+scratch*
+/scratch/
+.agent/
+__pycache__/

@@ -33,7 +33,8 @@ import { timeRangesOverlap, HH_MM_REGEX } from "./time-utils";
 export interface ConflictCheckInput {
   teacherUserId: string;
   dayOfWeek: number;          // 0..6 (Samik day-of-week)
-  weekType: "ALL_WEEKS" | "ODD_WEEKS" | "EVEN_WEEKS";
+  weekType: "ALL_WEEKS" | "ODD_WEEKS" | "EVEN_WEEKS" | "SINGLE_SESSION";
+  specificDate?: Date | null;
   startTime: string;          // "HH:mm"
   endTime: string;            // "HH:mm"
   /**
@@ -49,7 +50,7 @@ export interface ConflictFinding {
   schoolName: string;
   slotId: string;
   dayOfWeek: number;
-  weekType: "ALL_WEEKS" | "ODD_WEEKS" | "EVEN_WEEKS";
+  weekType: "ALL_WEEKS" | "ODD_WEEKS" | "EVEN_WEEKS" | "SINGLE_SESSION";
   startTime: string;
   endTime: string;
   classroomName: string;
@@ -64,10 +65,11 @@ export interface ConflictFinding {
  * ODD_WEEKS vs EVEN_WEEKS = NO week overlap → never a conflict.
  */
 function weekTypesOverlap(
-  a: "ALL_WEEKS" | "ODD_WEEKS" | "EVEN_WEEKS",
-  b: "ALL_WEEKS" | "ODD_WEEKS" | "EVEN_WEEKS"
+  a: "ALL_WEEKS" | "ODD_WEEKS" | "EVEN_WEEKS" | "SINGLE_SESSION",
+  b: "ALL_WEEKS" | "ODD_WEEKS" | "EVEN_WEEKS" | "SINGLE_SESSION"
 ): boolean {
   if (a === "ALL_WEEKS" || b === "ALL_WEEKS") return true;
+  if (a === "SINGLE_SESSION" || b === "SINGLE_SESSION") return true;
   return a === b;
 }
 
@@ -120,7 +122,15 @@ export async function detectTeacherConflict(
 
     for (const slot of candidates) {
       // Week-type must overlap (ALL_WEEKS is universal)
-      if (!weekTypesOverlap(input.weekType, slot.weekType)) continue;
+      // Check week types overlap
+      if (!weekTypesOverlap(input.weekType as any, slot.weekType as any)) continue;
+      
+      // Specific date check
+      if (input.weekType === "SINGLE_SESSION" && slot.weekType === "SINGLE_SESSION") {
+        if (input.specificDate && slot.specificDate && input.specificDate.getTime() !== slot.specificDate.getTime()) {
+          continue; // Different dates, no conflict
+        }
+      }
 
       // Time-range overlap check using the lexicographic HH:mm formula.
       // Touching ranges (e.g. one ends at 09:00, the other starts at 09:00)

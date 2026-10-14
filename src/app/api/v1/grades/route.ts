@@ -36,13 +36,13 @@ const SaveBody = z.object({
  * grade per student per assessment — re-submitting updates the existing.
  */
 export async function POST(req: NextRequest) {
-  return withTenantContext(req, ["TEACHER"], async () => {
+  return withTenantContext(req, ["TEACHER"], async (ctx) => {
     let body: z.infer<typeof SaveBody>;
     try {
       body = SaveBody.parse(await req.json());
     } catch (e) {
       return NextResponse.json(
-        { ok: false, error: (e as z.ZodError).errors?.[0]?.message ?? "ورودی نامعتبر" },
+        { ok: false, error: (e as z.ZodError).issues?.[0]?.message ?? "ورودی نامعتبر" },
         { status: 400 }
       );
     }
@@ -52,10 +52,14 @@ export async function POST(req: NextRequest) {
         where: {
           assessmentId_studentUserId: {
             assessmentId: body.assessmentId,
+            // The compound key mirrors `@@unique([assessmentId, studentUserId])`
+            // on the Grade model. It was `studentId`, which does not exist on
+            // that input, so every grade save threw and returned 500.
             studentUserId: body.studentUserId,
           },
         },
         create: {
+          schoolId: ctx.schoolId,
           assessmentId: body.assessmentId,
           studentUserId: body.studentUserId,
           numericScore: body.numericScore ?? null,

@@ -1,9 +1,9 @@
 "use client";
 
 import { cn } from "@/lib/utils";
-import { Check, X, Clock, FileText } from "lucide-react";
+import { Check, X } from "lucide-react";
 
-export type AttendanceState = "PRESENT" | "ABSENT" | "LATE" | "EXCUSED";
+export type AttendanceState = "PRESENT" | "ABSENT";
 
 const STATES: Array<{
   value: AttendanceState;
@@ -25,20 +25,6 @@ const STATES: Array<{
     icon: X,
     activeClass: "bg-destructive text-white shadow-destructive/30",
     inactiveClass: "bg-muted text-muted-foreground hover:bg-destructive/10",
-  },
-  {
-    value: "LATE",
-    label: "تاخیر",
-    icon: Clock,
-    activeClass: "bg-warning text-white shadow-warning/30",
-    inactiveClass: "bg-muted text-muted-foreground hover:bg-warning/10",
-  },
-  {
-    value: "EXCUSED",
-    label: "موجه",
-    icon: FileText,
-    activeClass: "bg-info text-white shadow-info/30",
-    inactiveClass: "bg-muted text-muted-foreground hover:bg-info/10",
   },
 ];
 

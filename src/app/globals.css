@@ -142,6 +142,12 @@
     direction: rtl;
     scroll-behavior: smooth;
   }
+  body,
+  table,
+  [data-slot="table"],
+  [data-slot="table-container"] {
+    direction: rtl;
+  }
   body {
     @apply bg-background text-foreground antialiased;
     font-feature-settings: "ss01", "cv01";
@@ -261,3 +267,33 @@
     background: var(--muted-foreground);
   }
 }
+
+/* ── Print Isolation for Dialogs ── */
+@media print {
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Reset document scrolling so print does not truncate */
+  html,
+  body {
+    overflow: visible !important;
+    height: auto !important;
+    min-height: auto !important;
+    background: #ffffff !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  /* When printing schedule, hide standard layout elements */
+  body.printing-schedule header,
+  body.printing-schedule aside,
+  body.printing-schedule main,
+  body.printing-schedule footer,
+  body.printing-schedule [data-radix-dialog-overlay] {
+    display: none !important;
+  }
+}
+
+

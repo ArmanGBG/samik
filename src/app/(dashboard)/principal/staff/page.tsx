@@ -1,7 +1,7 @@
-import { StaffManager } from "@/components/dashboard/staff-manager";
+import { SchoolDetailsManager } from "@/components/dashboard/school-details-manager";
 
-export const metadata = { title: "پرسنل | سامیک" };
+export const metadata = { title: "مدیریت کادر و پرسنل | سامیک" };
 
 export default function PrincipalStaffPage() {
-  return <StaffManager />;
+  return <SchoolDetailsManager isPrincipal={true} defaultTab="staff" />;
 }

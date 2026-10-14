@@ -1,4 +1,5 @@
 import { PrismaClient, StaffRole, EnrollmentStatus, WeekType, EvaluationType, AttendanceStatus, PointType } from "@prisma/client";
+import type { User, BellSchedule, Subject, ClassRoom } from "@prisma/client";
 
 const prisma = new PrismaClient();
 
@@ -121,7 +122,7 @@ async function main() {
     },
   ];
 
-  const teachers = [];
+  const teachers: User[] = [];
   for (const t of teachersData) {
     const user = await prisma.user.upsert({
       where: { phoneNumber: t.phone },
@@ -162,7 +163,7 @@ async function main() {
     { title: "زنگ چهارم", startTime: "12:45", endTime: "14:15" },
   ];
 
-  const bells = [];
+  const bells: BellSchedule[] = [];
   for (const b of bellsData) {
     let bell = await prisma.bellSchedule.findFirst({
       where: { schoolId: school.id, title: b.title },
@@ -191,7 +192,7 @@ async function main() {
     "زبان انگلیسی",
   ];
 
-  const subjects = [];
+  const subjects: Subject[] = [];
   for (const title of subjectsData) {
     let subject = await prisma.subject.findFirst({
       where: { schoolId: school.id, title },
@@ -212,7 +213,7 @@ async function main() {
     { gradeLevel: "یازدهم", name: "۲۰۱ تجربی", major: "EXPERIMENTAL" },
   ];
 
-  const classrooms = [];
+  const classrooms: ClassRoom[] = [];
   for (const c of classroomsData) {
     let room = await prisma.classRoom.findFirst({
       where: { schoolId: school.id, name: c.name },
@@ -464,6 +465,7 @@ async function main() {
       data: {
         schoolId: school.id,
         classRoomId: class101.id,
+        subjectId: subjects[0].id,
         teacherUserId: mathTeacher.id,
         title: "آزمون مستمر ریاضی مهرماه",
         evaluationType: EvaluationType.NUMERIC,
@@ -495,6 +497,7 @@ async function main() {
         schoolId: school.id,
         studentUserId: firstStudentUserId,
         teacherUserId: mathTeacher.id,
+        subjectId: subjects[0].id,
         pointType: PointType.POSITIVE,
         reasonTag: "حل تمرین خلاقانه پای تخته",
       },

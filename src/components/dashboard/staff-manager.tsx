@@ -55,6 +55,7 @@ import {
   CalendarClock,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { toPersianDate } from "@/lib/date-utils";
 import { safeJsonResponse } from "@/lib/safe-fetch";
 import { PageHeader } from "@/components/shared/page-header";
 import { EmptyState } from "@/components/shared/empty-state";
@@ -170,7 +171,10 @@ export function StaffManager() {
       const r = await fetch("/api/v1/principal/staff", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
+        body: JSON.stringify({
+          ...form,
+          nationalCode: form.nationalCode.trim() || undefined,
+        }),
       });
       const d = await safeJsonResponse(r, "ثبت پرسنل ناموفق بود.");
       if (!d.ok) {
@@ -191,12 +195,14 @@ export function StaffManager() {
 
   // ── Edit handlers ──
   function openEdit(s: StaffMember) {
+    const rawNc = s.nationalCode || "";
+    const cleanNc = rawNc.startsWith("TEMP-") || rawNc.startsWith("PENDING-") ? "" : rawNc;
     setEditing(s);
     setEditForm({
       firstName: s.firstName,
       lastName: s.lastName,
       phoneNumber: s.phoneNumber,
-      nationalCode: s.nationalCode,
+      nationalCode: cleanNc,
       role: s.role === "PRINCIPAL" ? "TEACHER" : (s.role as "DEPUTY" | "TEACHER"),
     });
   }
@@ -208,7 +214,10 @@ export function StaffManager() {
       const r = await fetch(`/api/v1/principal/staff?id=${editing.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(editForm),
+        body: JSON.stringify({
+          ...editForm,
+          nationalCode: editForm.nationalCode.trim() || undefined,
+        }),
       });
       const d = await safeJsonResponse(r, "ویرایش ناموفق بود.");
       if (!d.ok) {
@@ -279,17 +288,7 @@ export function StaffManager() {
         <form onSubmit={onSubmit}>
           <CardContent>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {/* Row 1: First Name, Last Name, Mobile */}
-              <div className="space-y-1.5">
-                <Label htmlFor="fn" className="text-xs font-medium">نام</Label>
-                <Input
-                  id="fn"
-                  className="h-9"
-                  value={form.firstName}
-                  onChange={(e) => setForm({ ...form, firstName: e.target.value })}
-                  required
-                />
-              </div>
+              {/* Row 1: Last Name, First Name, Mobile */}
               <div className="space-y-1.5">
                 <Label htmlFor="ln" className="text-xs font-medium">نام خانوادگی</Label>
                 <Input
@@ -297,6 +296,18 @@ export function StaffManager() {
                   className="h-9"
                   value={form.lastName}
                   onChange={(e) => setForm({ ...form, lastName: e.target.value })}
+                  placeholder="حسینی"
+                  required
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="fn" className="text-xs font-medium">نام</Label>
+                <Input
+                  id="fn"
+                  className="h-9"
+                  value={form.firstName}
+                  onChange={(e) => setForm({ ...form, firstName: e.target.value })}
+                  placeholder="مریم"
                   required
                 />
               </div>
@@ -318,18 +329,19 @@ export function StaffManager() {
               </div>
               {/* Row 2: National ID, Role, Submit Button */}
               <div className="space-y-1.5">
-                <Label htmlFor="nc" className="text-xs font-medium">کد ملی</Label>
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="nc" className="text-xs font-medium">کد ملی</Label>
+                  <span className="text-[10px] text-muted-foreground font-normal">(اختیاری)</span>
+                </div>
                 <Input
                   id="nc"
                   type="text"
                   inputMode="numeric"
                   dir="ltr"
                   className="text-left font-mono h-9"
-                  placeholder="1234567890"
+                  placeholder="۱۰ رقم (اختیاری — کد موقت)"
                   value={form.nationalCode}
                   onChange={(e) => setForm({ ...form, nationalCode: e.target.value })}
-                  required
-                  pattern="\d{10}"
                   maxLength={10}
                 />
               </div>
@@ -391,8 +403,8 @@ export function StaffManager() {
               description="با فرم بالا معلم یا ناظم جدید اضافه کنید."
             />
           ) : (
-            <div className="overflow-x-auto max-h-[28rem] overflow-y-auto sticky-table-header">
-              <Table className="table-fixed w-full">
+            <div className="overflow-x-auto max-h-[28rem] overflow-y-auto sticky-table-header" dir="rtl">
+              <Table className="table-fixed w-full" dir="rtl">
                 <colgroup>
                   <col className="w-[18%]" />
                   <col className="w-[14%]" />
@@ -407,7 +419,7 @@ export function StaffManager() {
                     <SortableHead label="نام" sortKey="fullName" currentKey={sortKey} dir={sortDir} onClick={() => toggleSort("fullName")} />
                     <SortableHead label="نقش" sortKey="role" currentKey={sortKey} dir={sortDir} onClick={() => toggleSort("role")} />
                     <SortableHead label="شماره موبایل" sortKey="phoneNumber" currentKey={sortKey} dir={sortDir} onClick={() => toggleSort("phoneNumber")} />
-                    <TableHead className="text-center">کد ملی</TableHead>
+                    <TableHead className="text-right">کد ملی</TableHead>
                     <SortableHead label="برنامه هفتگی" sortKey="slotCount" currentKey={sortKey} dir={sortDir} onClick={() => toggleSort("slotCount")} className="text-center" />
                     <SortableHead label="تاریخ عضویت" sortKey="createdAt" currentKey={sortKey} dir={sortDir} onClick={() => toggleSort("createdAt")} className="text-center" />
                     <TableHead className="text-center">عملیات</TableHead>
@@ -425,18 +437,26 @@ export function StaffManager() {
                         className="data-table-row stagger-item"
                         style={{ animationDelay: `${i * 30}ms` }}
                       >
-                        <TableCell className="font-medium truncate">{s.fullName}</TableCell>
-                        <TableCell>
+                        <TableCell className="font-medium truncate text-right">
+                          {s.fullName || `${s.firstName || ""} ${s.lastName || ""}`.trim() || "—"}
+                        </TableCell>
+                        <TableCell className="text-right">
                           <Badge variant="outline" className={cn("gap-1", roleMeta.tint)}>
                             <RoleIcon className="h-3 w-3" />
                             {roleMeta.label}
                           </Badge>
                         </TableCell>
-                        <TableCell dir="ltr" className="font-mono text-xs tabular-nums truncate">
+                        <TableCell className="font-mono text-xs tabular-nums truncate text-right">
                           {s.phoneNumber}
                         </TableCell>
-                        <TableCell dir="ltr" className="font-mono text-xs tabular-nums text-muted-foreground truncate">
-                          {s.nationalCode}
+                        <TableCell className="text-right">
+                          {s.nationalCode?.startsWith("TEMP-") || s.nationalCode?.startsWith("PENDING-") ? (
+                            <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-300 text-[10px] gap-1 font-normal">
+                              کد موقت
+                            </Badge>
+                          ) : (
+                            <span className="font-mono text-xs tabular-nums text-muted-foreground truncate">{s.nationalCode}</span>
+                          )}
                         </TableCell>
                         <TableCell className="text-center">
                           {s.role === "TEACHER" ? (
@@ -455,7 +475,7 @@ export function StaffManager() {
                           )}
                         </TableCell>
                         <TableCell className="text-center text-xs text-muted-foreground tabular-nums">
-                          {new Date(s.createdAt).toLocaleDateString("fa-IR")}
+                          {toPersianDate(s.createdAt)}
                         </TableCell>
                         <TableCell>
                           <div className="flex items-center justify-center gap-1">
@@ -517,19 +537,21 @@ export function StaffManager() {
           </DialogHeader>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 py-2">
             <div className="space-y-1.5">
-              <Label className="text-xs font-medium">نام</Label>
-              <Input
-                className="h-9"
-                value={editForm.firstName}
-                onChange={(e) => setEditForm({ ...editForm, firstName: e.target.value })}
-              />
-            </div>
-            <div className="space-y-1.5">
               <Label className="text-xs font-medium">نام خانوادگی</Label>
               <Input
                 className="h-9"
                 value={editForm.lastName}
                 onChange={(e) => setEditForm({ ...editForm, lastName: e.target.value })}
+                placeholder="حسینی"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium">نام</Label>
+              <Input
+                className="h-9"
+                value={editForm.firstName}
+                onChange={(e) => setEditForm({ ...editForm, firstName: e.target.value })}
+                placeholder="مریم"
               />
             </div>
             <div className="space-y-1.5">
@@ -550,6 +572,8 @@ export function StaffManager() {
                 inputMode="numeric"
                 dir="ltr"
                 className="text-left font-mono h-9"
+                placeholder="۱۰ رقم (اختیاری)"
+                maxLength={10}
                 value={editForm.nationalCode}
                 onChange={(e) => setEditForm({ ...editForm, nationalCode: e.target.value })}
               />
@@ -635,3 +659,5 @@ function SortableHead({
     </TableHead>
   );
 }
+
+// 1790849142

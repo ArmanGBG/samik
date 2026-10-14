@@ -9,7 +9,7 @@ import { db } from "@/lib/db";
  * to populate the teacher dropdown.
  */
 export async function GET(req: NextRequest) {
-  return withTenantContext(req, ["DEPUTY", "PRINCIPAL"], async () => {
+  return withTenantContext(req, ["DEPUTY", "PRINCIPAL"], async (ctx) => {
     const employments = await db.staffEmployment.findMany({
       where: { role: "TEACHER" },
       include: {

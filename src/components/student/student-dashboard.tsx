@@ -47,6 +47,7 @@ import {
   GraduationCap,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { toPersianDate } from "@/lib/date-utils";
 import { PageHeader } from "@/components/shared/page-header";
 import { KpiCardGrid } from "@/components/shared/kpi-card";
 import { ScrollReveal } from "@/components/shared/scroll-reveal";
@@ -96,20 +97,18 @@ interface DashboardData {
     total: number;
     present: number;
     absent: number;
-    late: number;
-    excused: number;
+    
   };
   recentAttendance: Array<{
     date: string;
-    status: "PRESENT" | "ABSENT" | "LATE" | "EXCUSED";
+    status: "PRESENT" | "ABSENT";
   }>;
 }
 
 const ATTENDANCE_LABELS: Record<string, { label: string; tint: string }> = {
   PRESENT: { label: "حاضر", tint: "bg-emerald/10 text-emerald border-emerald/20" },
   ABSENT: { label: "غایب", tint: "bg-destructive/10 text-destructive border-destructive/20" },
-  LATE: { label: "تاخیر", tint: "bg-warning/10 text-warning border-warning/20" },
-  EXCUSED: { label: "موجه", tint: "bg-info/10 text-info border-info/20" },
+  
 };
 
 export function StudentDashboard() {
@@ -158,16 +157,14 @@ export function StudentDashboard() {
   // Real-time synchronization: automatically re-fetch whenever grades,
   // behavioral points, or attendance records change for this student!
   useRealtimeEvent(
-    ["grade:saved", "behavioral-point:created", "attendance:submitted", "attendance:excused"],
+    ["grade:saved", "behavioral-point:created", "attendance:submitted"],
     (event) => {
       void loadData();
       if (event.type === "grade:saved") {
         toast.info("نمره جدیدی در سامانه ثبت شد و کارنامه به‌روزرسانی گردید.");
       } else if (event.type === "behavioral-point:created") {
         toast.info("امتیاز انضباطی جدیدی ثبت گردید.");
-      } else if (event.type === "attendance:excused") {
-        toast.success("وضعیت غیبت به موجه تغییر یافت.");
-      }
+      } 
     }
   );
 
@@ -178,7 +175,7 @@ export function StudentDashboard() {
   const chartData = useMemo(() => {
     if (!data) return [];
     return data.gradesTimeline.map((g) => ({
-      date: new Date(g.date).toLocaleDateString("fa-IR", { month: "short", day: "numeric" }),
+      date: toPersianDate(g.date, { month: "short", day: "numeric" }),
       score: g.score,
       title: g.assessmentTitle,
     }));
@@ -444,7 +441,7 @@ export function StudentDashboard() {
                           </span>
                         </div>
                         <span dir="ltr" className="text-[10px] text-muted-foreground font-mono tabular-nums shrink-0">
-                          {new Date(b.createdAt).toLocaleDateString("fa-IR")}
+                          {toPersianDate(b.createdAt)}
                         </span>
                       </div>
                     ))}
@@ -484,7 +481,7 @@ export function StudentDashboard() {
                           style={{ animationDelay: `${i * 30}ms` }}
                         >
                           <span dir="ltr" className="text-xs text-muted-foreground font-mono tabular-nums shrink-0">
-                            {new Date(a.date).toLocaleDateString("fa-IR")}
+                            {toPersianDate(a.date)}
                           </span>
                           <div className="flex-1" />
                           <Badge variant="outline" className={cn("text-[10px]", info.tint)}>

@@ -30,6 +30,7 @@ const TENANT_SCOPED_MODELS = new Set<string>([
   "School",
   "ClassRoom",
   "StaffEmployment",
+  "staffEmployment",
   "SchoolEnrollment",
   "BellSchedule",
   "Subject",
@@ -48,7 +49,12 @@ const TENANT_SCOPED_MODELS = new Set<string>([
  */
 
 function isTenantScoped(model: string | undefined): model is string {
-  return !!model && TENANT_SCOPED_MODELS.has(model);
+  if (!model) return false;
+  const lowerModel = model.toLowerCase();
+  for (const m of TENANT_SCOPED_MODELS) {
+    if (m.toLowerCase() === lowerModel) return true;
+  }
+  return false;
 }
 
 function currentSchoolId(): string | null {
@@ -68,7 +74,7 @@ function injectWhereFilter<T>(where: T, schoolId: string, model: string): T {
     return { schoolId } as unknown as T;
   }
   // If the model IS School, the school's own id == tenant id.
-  if (model === "School") {
+  if (model.toLowerCase() === "school") {
     return { ...(where as object), id: schoolId } as unknown as T;
   }
   return { ...(where as object), schoolId } as unknown as T;
@@ -81,6 +87,7 @@ export const tenantExtension = Prisma.defineExtension((client: any) => {
       $allModels: {
         async findMany({ model, operation, args, query }) {
           const sid = currentSchoolId();
+
           if (isTenantScoped(model) && sid) {
             args.where = injectWhereFilter(args.where, sid, model);
           }
@@ -88,6 +95,7 @@ export const tenantExtension = Prisma.defineExtension((client: any) => {
         },
         async findFirst({ model, args, query }) {
           const sid = currentSchoolId();
+
           if (isTenantScoped(model) && sid) {
             args.where = injectWhereFilter(args.where, sid, model);
           }
@@ -95,6 +103,7 @@ export const tenantExtension = Prisma.defineExtension((client: any) => {
         },
         async findFirstOrThrow({ model, args, query }) {
           const sid = currentSchoolId();
+
           if (isTenantScoped(model) && sid) {
             args.where = injectWhereFilter(args.where, sid, model);
           }
@@ -102,6 +111,7 @@ export const tenantExtension = Prisma.defineExtension((client: any) => {
         },
         async findUnique({ model, args, query }) {
           const sid = currentSchoolId();
+
           if (isTenantScoped(model) && sid) {
             // findUnique uses `where` directly; inject schoolId into the where clause
             args.where = injectWhereFilter(args.where, sid, model);
@@ -110,6 +120,7 @@ export const tenantExtension = Prisma.defineExtension((client: any) => {
         },
         async findUniqueOrThrow({ model, args, query }) {
           const sid = currentSchoolId();
+
           if (isTenantScoped(model) && sid) {
             args.where = injectWhereFilter(args.where, sid, model);
           }
@@ -117,6 +128,7 @@ export const tenantExtension = Prisma.defineExtension((client: any) => {
         },
         async count({ model, args, query }) {
           const sid = currentSchoolId();
+
           if (isTenantScoped(model) && sid) {
             args.where = injectWhereFilter(args.where, sid, model);
           }
@@ -124,6 +136,7 @@ export const tenantExtension = Prisma.defineExtension((client: any) => {
         },
         async aggregate({ model, args, query }) {
           const sid = currentSchoolId();
+
           if (isTenantScoped(model) && sid) {
             args.where = injectWhereFilter(args.where, sid, model);
           }
@@ -131,6 +144,7 @@ export const tenantExtension = Prisma.defineExtension((client: any) => {
         },
         async groupBy({ model, args, query }) {
           const sid = currentSchoolId();
+
           if (isTenantScoped(model) && sid) {
             args.where = injectWhereFilter(args.where, sid, model);
           }
@@ -140,7 +154,7 @@ export const tenantExtension = Prisma.defineExtension((client: any) => {
         // Mutations — force schoolId on writes
         async create({ model, args, query }) {
           const sid = currentSchoolId();
-          if (isTenantScoped(model) && sid && model !== "School") {
+          if (isTenantScoped(model) && sid && model.toLowerCase() !== "school") {
             const data = args.data as Record<string, unknown>;
             // Only inject schoolId if the caller didn't already provide it
             // via the scalar FK OR the relation connect syntax.
@@ -152,7 +166,7 @@ export const tenantExtension = Prisma.defineExtension((client: any) => {
         },
         async createMany({ model, args, query }) {
           const sid = currentSchoolId();
-          if (isTenantScoped(model) && sid && model !== "School") {
+          if (isTenantScoped(model) && sid && model.toLowerCase() !== "school") {
             const data = Array.isArray(args.data) ? args.data : [args.data];
             args.data = data.map((d) => ({ ...(d as object), schoolId: sid })) as any;
           }
@@ -160,7 +174,7 @@ export const tenantExtension = Prisma.defineExtension((client: any) => {
         },
         async createManyAndReturn({ model, args, query }) {
           const sid = currentSchoolId();
-          if (isTenantScoped(model) && sid && model !== "School") {
+          if (isTenantScoped(model) && sid && model.toLowerCase() !== "school") {
             const data = Array.isArray(args.data) ? args.data : [args.data];
             args.data = data.map((d) => ({ ...(d as object), schoolId: sid })) as any;
           }
@@ -168,6 +182,7 @@ export const tenantExtension = Prisma.defineExtension((client: any) => {
         },
         async update({ model, args, query }) {
           const sid = currentSchoolId();
+
           if (isTenantScoped(model) && sid) {
             args.where = injectWhereFilter(args.where, sid, model);
             // Prevent client from rewriting schoolId on update
@@ -179,6 +194,7 @@ export const tenantExtension = Prisma.defineExtension((client: any) => {
         },
         async updateMany({ model, args, query }) {
           const sid = currentSchoolId();
+
           if (isTenantScoped(model) && sid) {
             args.where = injectWhereFilter(args.where, sid, model);
             if (args.data && typeof args.data === "object" && "schoolId" in (args.data as object)) {
@@ -189,7 +205,7 @@ export const tenantExtension = Prisma.defineExtension((client: any) => {
         },
         async upsert({ model, args, query }) {
           const sid = currentSchoolId();
-          if (isTenantScoped(model) && sid && model !== "School") {
+          if (isTenantScoped(model) && sid && model.toLowerCase() !== "school") {
             args.where = injectWhereFilter(args.where, sid, model);
             args.create = { ...(args.create as object), schoolId: sid } as any;
             args.update = { ...(args.update as object) };
@@ -201,6 +217,7 @@ export const tenantExtension = Prisma.defineExtension((client: any) => {
         },
         async delete({ model, args, query }) {
           const sid = currentSchoolId();
+
           if (isTenantScoped(model) && sid) {
             args.where = injectWhereFilter(args.where, sid, model);
           }
@@ -208,6 +225,7 @@ export const tenantExtension = Prisma.defineExtension((client: any) => {
         },
         async deleteMany({ model, args, query }) {
           const sid = currentSchoolId();
+
           if (isTenantScoped(model) && sid) {
             args.where = injectWhereFilter(args.where, sid, model);
           }
@@ -217,3 +235,5 @@ export const tenantExtension = Prisma.defineExtension((client: any) => {
     },
   });
 });
+
+// 1790853235

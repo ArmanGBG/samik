@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useAuth, ProfileEntry } from "@/stores/auth-store";
 import { SamikLogo } from "@/components/brand-logo";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import {
   Card,
   CardContent,
@@ -17,6 +18,7 @@ import { toast } from "sonner";
 import {
   Loader2,
   ArrowLeft,
+  ArrowRight,
   School,
   UserCog,
   GraduationCap,
@@ -48,23 +50,34 @@ export default function SelectProfilePage() {
     auth.fetch();
   }, []);
 
-  // Bootstrap effect: if only ONE profile, auto-select it.
+  // Redirect to login if unauthenticated
   useEffect(() => {
     if (auth.state.status === "unauthenticated") {
       router.replace("/login");
       return;
     }
-    if (auth.state.status !== "root") return;
-    if (auth.state.profiles.length === 0) {
-      // No profiles — show "access denied" state
-      return;
-    }
-    // Note: do NOT auto-select even when there's only one profile — the
-    // explicit click is intentional (Section 3: "انتخاب کانتکست").
   }, [auth.state, router]);
 
+  const isContextual = auth.state.status === "contextual";
+  const contextualState = auth.state.status === "contextual" ? auth.state : null;
+  const currentRole = contextualState?.role ?? null;
+  const currentSchoolId = contextualState?.schoolId ?? null;
+  const currentStudentEnrollmentId = contextualState?.studentEnrollmentId ?? null;
+
   async function selectProfile(p: ProfileEntry) {
-    setSelecting(`${p.schoolId}:${p.role}`);
+    if (
+      isContextual &&
+      p.schoolId === currentSchoolId &&
+      p.role === currentRole &&
+      (p.role === "STUDENT" ? p.studentEnrollmentId === currentStudentEnrollmentId : true)
+    ) {
+      // Already on this profile — navigate straight to dashboard
+      const slug = p.role.toLowerCase().replace("_", "-");
+      router.replace(`/${slug}`);
+      return;
+    }
+
+    setSelecting(`${p.schoolId}:${p.role}${p.studentEnrollmentId ?? ""}`);
     try {
       const r = await fetch("/api/v1/auth/select-profile", {
         method: "POST",
@@ -80,7 +93,8 @@ export default function SelectProfilePage() {
         toast.error(data.error ?? "انتخاب پروفایل ناموفق بود.");
         return;
       }
-      toast.success(`ورود به ${data.profile.schoolName} با نقش ${data.profile.role}`);
+      toast.success(`ورود به ${data.profile.schoolName} با نقش ${data.profile.label ?? data.profile.role}`);
+      await auth.fetch();
       const slug = data.profile.role.toLowerCase().replace("_", "-");
       router.replace(`/${slug}`);
     } catch {
@@ -125,14 +139,6 @@ export default function SelectProfilePage() {
     return null; // effect will redirect
   }
 
-  if (auth.state.status === "contextual") {
-    // Already contextual — bounce to dashboard
-    const slug = auth.state.role.toLowerCase().replace("_", "-");
-    router.replace(`/${slug}`);
-    return null;
-  }
-
-  // Root state
   const { firstName, lastName, profiles } = auth.state;
 
   return (
@@ -143,15 +149,26 @@ export default function SelectProfilePage() {
             <SamikLogo size={44} />
           </div>
           <div className="stagger-item" style={{ animationDelay: "30ms" }}>
-            <CardTitle className="text-xl text-navy">انتخاب پروفایل</CardTitle>
+            <CardTitle className="text-xl text-navy">
+              {isContextual ? "تغییر نقش یا مدرسه" : "انتخاب پروفایل"}
+            </CardTitle>
             <CardDescription className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
               {firstName} {lastName} عزیز، خوش آمدید.
               <br />
-              لطفاً پروفایل مورد نظر خود را برای ادامه انتخاب کنید.
+              {isContextual
+                ? "لطفاً نقش یا مدرسهٔ مورد نظر خود را برای جابه‌جایی انتخاب کنید."
+                : "لطفاً پروفایل مورد نظر خود را برای ادامه انتخاب کنید."}
             </CardDescription>
           </div>
         </CardHeader>
-        <CardContent className="p-6 pt-4">
+        <CardContent className="p-6 pt-4 space-y-4">
+          {isContextual && profiles.length === 1 && (
+            <div className="rounded-lg bg-blue-50/70 border border-blue-200/60 p-3 text-xs text-navy leading-relaxed text-right">
+              <span className="font-semibold ml-1">اطلاعیه:</span>
+              در حال حاضر تنها همین یک نقش برای حساب کاربری شما در سامیک فعال است. در صورت تعریف نقش جدید توسط مدیر مدرسه، در این بخش قابل انتخاب خواهد بود.
+            </div>
+          )}
+
           {profiles.length === 0 ? (
             <EmptyState
               icon={ShieldAlert}
@@ -176,15 +193,26 @@ export default function SelectProfilePage() {
                 const key = `${p.schoolId}:${p.role}${p.studentEnrollmentId ?? ""}`;
                 const isPending = p.status === "PENDING_CONFIRMATION";
                 const isSelecting = selecting === key;
+                const isActive =
+                  isContextual &&
+                  p.schoolId === currentSchoolId &&
+                  p.role === currentRole &&
+                  (p.role === "STUDENT" ? p.studentEnrollmentId === currentStudentEnrollmentId : true);
+
                 return (
                   <div
                     key={key + i}
                     style={{ animationDelay: `${i * 60}ms` }}
                     className={cn(
                       "stagger-item kpi-card w-full flex items-center gap-3 p-3.5 rounded-xl border-2",
-                      "border-border bg-white text-right select-none transition-all",
-                      isPending ? "bg-warning/5 border-warning/30" : "hover:shadow-md cursor-pointer",
-                      style.ring
+                      "text-right select-none transition-all",
+                      isActive
+                        ? "border-emerald/50 bg-emerald-50/30 shadow-sm"
+                        : "border-border bg-white",
+                      isPending
+                        ? "bg-warning/5 border-warning/30"
+                        : "hover:shadow-md cursor-pointer",
+                      !isActive && style.ring
                     )}
                     onClick={isPending ? undefined : () => selectProfile(p)}
                   >
@@ -201,10 +229,21 @@ export default function SelectProfilePage() {
                       )}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold text-foreground truncate">
-                        {p.label}
-                      </p>
-                      <p className="text-[11px] text-muted-foreground tabular-nums" dir="ltr">
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-semibold text-foreground truncate">
+                          {p.label}
+                        </p>
+                        {isActive && (
+                          <Badge
+                            variant="outline"
+                            className="bg-emerald text-white border-transparent text-[10px] h-5 px-1.5 gap-1 shrink-0 font-medium"
+                          >
+                            <Check className="h-3 w-3" />
+                            پروفایل فعلی
+                          </Badge>
+                        )}
+                      </div>
+                      <p className="text-[11px] text-muted-foreground tabular-nums mt-0.5" dir="ltr">
                         {p.schoolSubdomain}.samik.app
                       </p>
                     </div>
@@ -236,20 +275,50 @@ export default function SelectProfilePage() {
                           <X className="h-3 w-3" /> رد
                         </Button>
                       </div>
+                    ) : isActive ? (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-7 text-xs text-emerald hover:text-emerald-700 hover:bg-emerald-100/50 font-medium gap-1 px-2 shrink-0"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          const slug = p.role.toLowerCase().replace("_", "-");
+                          router.replace(`/${slug}`);
+                        }}
+                      >
+                        ورود به پنل
+                        <ArrowLeft className="h-3.5 w-3.5" />
+                      </Button>
                     ) : (
                       <ArrowLeft className="h-4 w-4 text-muted-foreground shrink-0 transition-transform group-hover:-translate-x-1" />
                     )}
                   </div>
                 );
               })}
-              <div className="pt-3 mt-2 border-t border-border">
+
+              <div className="pt-3 mt-2 border-t border-border flex flex-col sm:flex-row items-center justify-between gap-2">
+                {isContextual && currentRole ? (
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      const slug = currentRole.toLowerCase().replace("_", "-");
+                      router.push(`/${slug}`);
+                    }}
+                    className="w-full sm:w-auto text-navy cursor-pointer gap-2"
+                  >
+                    <ArrowRight className="h-4 w-4" />
+                    بازگشت به پنل فعلی
+                  </Button>
+                ) : (
+                  <div />
+                )}
                 <Button
                   variant="ghost"
                   onClick={() => auth.logout()}
-                  className="w-full text-muted-foreground hover:text-destructive hover:bg-destructive/10 cursor-pointer gap-2"
+                  className="w-full sm:w-auto text-muted-foreground hover:text-destructive hover:bg-destructive/10 cursor-pointer gap-2"
                 >
                   <LogOut className="h-4 w-4" />
-                  خروج و بازگشت به صفحه ورود
+                  خروج از حساب کاربری
                 </Button>
               </div>
             </div>

@@ -36,12 +36,15 @@ const COMMON_TAGS = [
 export function QuickPointButtons({
   studentUserId,
   studentName,
+  subjectId,
   classSessionId,
   size = "sm",
   onSubmitted,
 }: {
   studentUserId: string;
   studentName: string;
+  /** The lesson this point belongs to — required so it is not counted elsewhere. */
+  subjectId: string;
   classSessionId?: string;
   size?: "sm" | "md";
   onSubmitted?: (type: "POSITIVE" | "NEGATIVE") => void;
@@ -93,6 +96,7 @@ export function QuickPointButtons({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           studentUserId,
+          subjectId,
           pointType: type,
           reasonTag: reasonTag || undefined,
           classSessionId,

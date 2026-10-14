@@ -25,8 +25,8 @@ import {
   Activity,
 } from "lucide-react";
 import { calculateWeekParity } from "@/lib/timetable/week-parity";
-import { format } from "date-fns";
-import { faIR } from "date-fns/locale";
+import { toIsoDateString, toPersianDate, toPersianDateLong } from "@/lib/date-utils";
+import { PersianDatePicker } from "@/components/ui/persian-date-picker";
 import { cn } from "@/lib/utils";
 import { PageHeader } from "@/components/shared/page-header";
 import { ScrollReveal } from "@/components/shared/scroll-reveal";
@@ -62,8 +62,7 @@ export function TermConfigManager() {
         setSchool(d.school);
         if (d.school.termStartDate) {
           // Convert ISO to YYYY-MM-DD for <input type="date">
-          const dt = new Date(d.school.termStartDate);
-          setTermDate(format(dt, "yyyy-MM-dd"));
+          setTermDate(toIsoDateString(d.school.termStartDate));
         }
       }
     } catch (err) {
@@ -221,16 +220,15 @@ export function TermConfigManager() {
                 <Label htmlFor="termDate" className="text-xs font-medium">
                   تاریخ شروع ترم
                 </Label>
-                <Input
-                  id="termDate"
-                  type="date"
-                  dir="ltr"
-                  className="font-mono text-left tabular-nums"
+                <PersianDatePicker
                   value={termDate}
-                  onChange={(e) => setTermDate(e.target.value)}
+                  onChange={(d) => setTermDate(d)}
+                  placeholder="انتخاب تاریخ شروع ترم (هجری شمسی)..."
+                  suggestedDate="2025-09-23"
+                  suggestedLabel="۱ مهر ۱۴۰۴ (پیشنهادی)"
                 />
                 <p className="text-xs text-muted-foreground">
-                  هجری شمسی پیشنهادی: ۱۴۰۴/۰۷/۰۱ (معادل 2025-09-23 میلادی — اولین شنبهٔ سال تحصیلی ۱۴۰۴–۱۴۰۵)
+                  توصیه می‌شود اولین شنبه سال تحصیلی را انتخاب کنید (مثلاً ۱ مهر ۱۴۰۴ — شروع هفتهٔ ۱ فرد).
                 </p>
               </div>
 

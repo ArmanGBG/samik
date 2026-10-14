@@ -21,3 +21,5 @@ const basePrisma = new PrismaClient({
 export const db = basePrisma.$extends(softDeleteExtension).$extends(tenantExtension);
 
 export type { PrismaClient };
+
+// 1790853272

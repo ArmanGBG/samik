@@ -27,8 +27,8 @@ export default function TeacherGradebookIndexPage() {
     async function load() {
       try {
         const [meRes, ttRes] = await Promise.all([
-          fetch("/api/v1/me"),
-          fetch("/api/v1/deputy/timetable"),
+          fetch("/api/v1/me", { cache: "no-store" }),
+          fetch("/api/v1/deputy/timetable", { cache: "no-store" }),
         ]);
         const meData = await meRes.json();
         const d = await ttRes.json();
@@ -41,8 +41,9 @@ export default function TeacherGradebookIndexPage() {
           const seen = new Set<string>();
           const unique: ClassroomSlot[] = [];
           for (const s of slotsToUse) {
-            if (!seen.has(s.classRoom.id)) {
-              seen.add(s.classRoom.id);
+            const key = `${s.classRoom.id}-${s.subject.id}`;
+            if (!seen.has(key)) {
+              seen.add(key);
               unique.push(s);
             }
           }
@@ -66,19 +67,16 @@ export default function TeacherGradebookIndexPage() {
   }
 
   // Group by classroom
-  const classrooms = slots.reduce<Record<string, { info: ClassroomSlot["classRoom"]; subjects: string[] }>>(
+  // Group by classroom + subject
+  const classroomList = slots.reduce<Array<{ info: ClassroomSlot["classRoom"]; subject: { id: string; title: string }; slotId: string }>>(
     (acc, s) => {
-      const key = s.classRoom.id;
-      if (!acc[key]) acc[key] = { info: s.classRoom, subjects: [] };
-      if (!acc[key].subjects.includes(s.subject.title)) {
-        acc[key].subjects.push(s.subject.title);
+      if (!acc.find(x => x.info.id === s.classRoom.id && x.subject.id === s.subject.id)) {
+        acc.push({ info: s.classRoom, subject: s.subject, slotId: (s as any).id });
       }
       return acc;
     },
-    {}
+    []
   );
-
-  const classroomList = Object.values(classrooms);
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
@@ -101,10 +99,10 @@ export default function TeacherGradebookIndexPage() {
       ) : (
         <ScrollReveal>
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            {classroomList.map(({ info, subjects }, i) => (
+            {classroomList.map(({ info, subject }, i) => (
               <Link
-                key={info.id}
-                href={`/teacher/gradebook/${info.id}`}
+                key={`${info.id}-${subject.id}`}
+                href={`/teacher/gradebook/${info.id}?subjectId=${subject.id}`}
                 className="block h-full"
               >
                 <Card
@@ -126,15 +124,7 @@ export default function TeacherGradebookIndexPage() {
                       <ArrowLeft className="h-4 w-4 text-muted-foreground shrink-0" />
                     </div>
                     <div className="flex flex-wrap gap-1">
-                      {subjects.map((subj) => (
-                        <Badge
-                          key={subj}
-                          variant="outline"
-                          className="text-[10px] bg-emerald/5 text-emerald border-emerald/20"
-                        >
-                          {subj}
-                        </Badge>
-                      ))}
+                      <Badge variant="outline" className="text-[10px] bg-emerald/5 text-emerald border-emerald/20">{subject.title}</Badge>
                     </div>
                   </CardContent>
                 </Card>

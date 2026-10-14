@@ -30,6 +30,7 @@ import { cn } from "@/lib/utils";
 interface ActiveSession {
   slotId: string;
   classRoomId: string;
+  subjectId: string;
   classRoomName: string;
   subjectTitle: string;
   bellTitle: string;
@@ -42,6 +43,7 @@ interface ActiveSession {
 
 interface AgendaItem {
   slotId: string;
+  subjectId: string;
   subjectTitle: string;
   classroomName: string;
   classRoomId: string;
@@ -92,7 +94,7 @@ export function TeacherCurrentSession() {
   async function load(silent = false) {
     if (silent) setRefreshing(true); else setLoading(true);
     try {
-      const r = await fetch("/api/v1/teacher/current-session");
+      const r = await fetch("/api/v1/teacher/current-session", { cache: "no-store" });
       const d = await r.json();
       if (d.ok) setData(d);
       else toast.error(d.error ?? "خطا در دریافت جلسه فعلی.");
@@ -204,10 +206,10 @@ export function TeacherCurrentSession() {
                 <Button
                   variant="secondary"
                   className="bg-white text-emerald-700 hover:bg-white/90 h-10 px-5 shadow-sm font-semibold gap-2 cursor-pointer"
-                  onClick={() => router.push(`/teacher/attendance/${activeSession.slotId}`)}
+                  onClick={() => router.push(`/teacher/session/${activeSession.slotId}`)}
                 >
                   <PlayCircle className="h-4 w-4" />
-                  ورود به ثبت حضور و غیاب
+                  مدیریت جلسه کلاس
                 </Button>
               </div>
 
@@ -312,19 +314,20 @@ export function TeacherCurrentSession() {
                           size="sm"
                           variant="default"
                           className="h-8 text-xs bg-emerald hover:bg-emerald-600 gap-1 px-2.5 cursor-pointer font-medium"
-                          onClick={() => router.push(`/teacher/attendance/${item.slotId}`)}
+                          onClick={() => router.push(`/teacher/session/${item.slotId}`)}
                         >
                           <PlayCircle className="h-3.5 w-3.5" />
-                          حضور و غیاب
+                          مدیریت کلاس
                         </Button>
                         <Button
                           size="sm"
-                          variant="outline"
-                          className="h-8 text-xs gap-1 px-2.5 cursor-pointer text-navy hover:bg-navy/5 font-medium"
-                          onClick={() => router.push(`/teacher/gradebook/${item.classRoomId}`)}
+                          variant="ghost"
+                          className="h-8 text-xs gap-1 px-2.5 cursor-pointer text-muted-foreground hover:text-navy hover:bg-navy/5 font-medium"
+                          onClick={() => router.push(`/teacher/gradebook/${item.classRoomId}?subjectId=${item.subjectId}`)}
+                          title="دفتر نمره کل ترم"
                         >
                           <BookOpen className="h-3.5 w-3.5" />
-                          دفتر نمره
+                          نمرات کل
                         </Button>
                       </div>
                     </div>

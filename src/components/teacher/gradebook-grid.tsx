@@ -2,20 +2,10 @@
 
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useRealtimeEvent } from "@/lib/realtime/realtime-context";
-import {
-  flexRender,
-  getCoreRowModel,
-  useReactTable,
-  type ColumnDef,
-} from "@tanstack/react-table";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import {
-  Card,
-  CardContent,
-} from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -23,43 +13,25 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { toast } from "sonner";
 import {
   Loader2,
-  Plus,
-  TrendingUp,
-  ThumbsUp,
-  ThumbsDown,
   BookOpen,
+  ArrowRight,
+  Plus,
+  Search,
+  Star,
+  ThumbsDown,
+  ThumbsUp
 } from "lucide-react";
-import { QuickPointButtons } from "@/components/teacher/quick-point-buttons";
 import { PageHeader } from "@/components/shared/page-header";
 import { ScrollReveal } from "@/components/shared/scroll-reveal";
+import { QuickPointButtons } from "@/components/teacher/quick-point-buttons";
+import { PersianDatePicker } from "@/components/ui/persian-date-picker";
 import { cn } from "@/lib/utils";
-
-interface Assessment {
-  id: string;
-  title: string;
-  evaluationType: "NUMERIC" | "DESCRIPTIVE";
-  date: string;
-}
+import { toPersianDate } from "@/lib/date-utils";
+import { useRouter } from "next/navigation";
 
 interface GradeCell {
   assessmentId: string;
@@ -76,263 +48,194 @@ interface MatrixStudent {
   fullName: string;
   monthlyAverage: number | null;
   grades: GradeCell[];
+  attendance: Array<{
+    sessionId: string;
+    status: "PRESENT" | "ABSENT";
+  }>;
   behavioralPoints: { positive: number; negative: number };
+  totalAbsences: number;
 }
 
 interface GradebookData {
-  classroom: { id: string; gradeLevel: string; name: string };
-  assessments: Assessment[];
+  ok: boolean;
+  classroom: { id: string; gradeLevel: string; name: string; subjects: string[] };
+  sessions: Array<{ id: string; date: string }>;
+  assessments: Array<{ id: string; title: string; evaluationType: "NUMERIC" | "DESCRIPTIVE"; date: string }>;
   students: MatrixStudent[];
 }
 
 const DESCRIPTIVE_LABELS: Record<string, { label: string; tint: string }> = {
-  EXCELLENT: { label: "خیلی خوب", tint: "bg-emerald/10 text-emerald" },
-  GOOD: { label: "خوب", tint: "bg-info/10 text-info" },
-  ACCEPTABLE: { label: "قابل قبول", tint: "bg-warning/10 text-warning" },
-  NEEDS_IMPROVEMENT: { label: "نیاز به تلاش", tint: "bg-destructive/10 text-destructive" },
+  EXCELLENT: { label: "عالی", tint: "bg-emerald-100 text-emerald-800" },
+  GOOD: { label: "خوب", tint: "bg-blue-100 text-blue-800" },
+  ACCEPTABLE: { label: "قابل قبول", tint: "bg-yellow-100 text-yellow-800" },
+  NEEDS_IMPROVEMENT: { label: "نیاز به تلاش", tint: "bg-red-100 text-red-800" },
 };
 
-function toPersian(num: number | null): string {
-  if (num === null) return "—";
-  return num.toLocaleString("fa-IR", { maximumFractionDigits: 2 });
-}
-
-/**
- * Color tint for a numeric score:
- *   emerald ≥ 15, amber ≥ 10, red < 10.
- * Per the task spec.
- */
-function scoreTint(score: number | null): string {
+function scoreTint(score: number | null) {
   if (score === null) return "";
-  if (score >= 15) return "bg-emerald/10 text-emerald hover:bg-emerald/20";
-  if (score >= 10) return "bg-warning/10 text-warning hover:bg-warning/20";
-  return "bg-destructive/10 text-destructive hover:bg-destructive/20";
-}
-
-function averageColor(avg: number | null): string {
-  if (avg === null) return "text-muted-foreground";
-  if (avg >= 15) return "text-emerald";
-  if (avg >= 10) return "text-warning";
+  if (score >= 18) return "text-emerald";
+  if (score >= 15) return "text-blue-600";
+  if (score >= 10) return "text-warning";
   return "text-destructive";
 }
 
-export function GradebookGrid({ classId }: { classId: string }) {
-  const [loading, setLoading] = useState(true);
+function averageColor(val: number | null) {
+  if (val === null) return "text-muted-foreground opacity-50";
+  if (val >= 18) return "text-emerald";
+  if (val >= 15) return "text-blue-600";
+  if (val >= 10) return "text-warning";
+  return "text-destructive";
+}
+
+export function GradebookGrid({ classId, subjectId }: { classId: string; subjectId: string }) {
+  const router = useRouter();
   const [data, setData] = useState<GradebookData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [newAssessmentTitle, setNewAssessmentTitle] = useState("");
+  const [newAssessmentDate, setNewAssessmentDate] = useState("");
+  const [newAssessmentType, setNewAssessmentType] = useState<"NUMERIC" | "DESCRIPTIVE">("NUMERIC");
+  const [creatingAssessment, setCreatingAssessment] = useState(false);
+
+  const handleCreateAssessment = async () => {
+    if (!newAssessmentTitle.trim() || !newAssessmentDate) {
+      toast.error("لطفاً عنوان و تاریخ ارزیابی را وارد کنید.");
+      return;
+    }
+    setCreatingAssessment(true);
+    try {
+      const res = await fetch("/api/v1/assessments", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          classRoomId: classId,
+          subjectId: subjectId,
+          title: newAssessmentTitle,
+          date: newAssessmentDate,
+          evaluationType: newAssessmentType,
+        }),
+      });
+      const dataRes = await res.json();
+      if (!dataRes.ok) {
+        toast.error(dataRes.error ?? "خطا در ایجاد ارزیابی.");
+        return;
+      }
+      toast.success("ارزیابی با موفقیت ایجاد شد.");
+      setIsCreateModalOpen(false);
+      setNewAssessmentTitle("");
+      setNewAssessmentDate("");
+      void load(); // reload grid
+    } catch (err) {
+      console.error(err);
+      toast.error("خطا در برقراری ارتباط با سرور.");
+    } finally {
+      setCreatingAssessment(false);
+    }
+  };
+
   const [editing, setEditing] = useState<{
     assessmentId: string;
     studentId: string;
     studentName: string;
+    assessmentTitle: string;
     type: "NUMERIC" | "DESCRIPTIVE";
   } | null>(null);
   const [editValue, setEditValue] = useState<string>("");
   const [saving, setSaving] = useState(false);
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [newAssessment, setNewAssessment] = useState({
-    title: "",
-    evaluationType: "NUMERIC" as "NUMERIC" | "DESCRIPTIVE",
-    date: new Date().toISOString().slice(0, 10),
-  });
+
+  const [error, setError] = useState<string | null>(null);
+
+  // Reset the spinner during render when the requested class/subject changes.
+  // Switching the term-history subject does not remount this component, so
+  // without this the previous subject's rows stayed on screen while loading.
+  const requestKey = `${classId}:${subjectId}`;
+  const [loadedKey, setLoadedKey] = useState<string | null>(null);
+  if (loadedKey !== requestKey) {
+    setLoadedKey(requestKey);
+    setLoading(true);
+  }
 
   const load = useCallback(async () => {
-    setLoading(true);
     try {
-      const r = await fetch(`/api/v1/gradebook?classroomId=${classId}`);
-      const d = await r.json();
-      if (d.ok) setData(d);
-      else toast.error(d.error ?? "خطا در دریافت اطلاعات دفتر نمره.");
-    } catch (err) {
-      console.error("[LOAD_GRADEBOOK_ERROR]", err);
-      toast.error("خطا در برقراری ارتباط با سرور.");
+      const res = await fetch(
+        `/api/v1/gradebook?classroomId=${classId}&subjectId=${subjectId}`,
+        { cache: "no-store" }
+      );
+      const d = await res.json().catch(() => null);
+      if (d?.ok) {
+        setData(d);
+        setError(null);
+      } else {
+        // Surface the server's reason instead of the generic
+        // "class not found" message, which hid every API failure.
+        setError(d?.error ?? `خطای سرور (کد ${res.status})`);
+      }
+    } catch {
+      setError("خطا در برقراری ارتباط با سرور.");
     } finally {
       setLoading(false);
     }
-  }, [classId]);
+    // `subjectId` must be a dependency: without it, switching the term-history
+    // subject kept the previous subject's data on screen.
+  }, [classId, subjectId]);
 
   useEffect(() => {
     load();
   }, [load]);
 
-  // Real-time synchronization: automatically update the matrix when grades
-  // or behavioral points are submitted
   useRealtimeEvent(["grade:saved", "behavioral-point:created"], () => {
     void load();
   });
 
-  const columns = useMemo<ColumnDef<MatrixStudent>[]>(() => {
+  const filteredStudents = useMemo(() => {
     if (!data) return [];
-    const cols: ColumnDef<MatrixStudent>[] = [
-      {
-        id: "student",
-        header: "دانش‌آموز",
-        cell: ({ row }) => {
-          const s = row.original;
-          return (
-            <div className="flex items-center gap-2 min-w-[180px]">
-              <div className="flex-1 min-w-0">
-                <div className="font-medium text-sm truncate">{s.fullName}</div>
-                <div className="flex items-center gap-2 mt-0.5">
-                  <span className="inline-flex items-center gap-0.5 text-[10px] text-emerald tabular-nums">
-                    <ThumbsUp className="h-2.5 w-2.5" />
-                    {s.behavioralPoints.positive.toLocaleString("fa-IR")}
-                  </span>
-                  <span className="inline-flex items-center gap-0.5 text-[10px] text-destructive tabular-nums">
-                    <ThumbsDown className="h-2.5 w-2.5" />
-                    {s.behavioralPoints.negative.toLocaleString("fa-IR")}
-                  </span>
-                </div>
-              </div>
-              <QuickPointButtons
-                studentUserId={s.studentId}
-                studentName={s.fullName}
-                size="sm"
-                onSubmitted={load}
-              />
-            </div>
-          );
-        },
-      },
-      // Dynamic columns — one per assessment (last 30 days)
-      ...data.assessments.map((a) => ({
-        id: a.id,
-        header: () => (
-          <div className="text-center min-w-[70px]">
-            <div className="font-medium text-xs truncate" title={a.title}>{a.title}</div>
-            <div className="text-[10px] text-muted-foreground mt-0.5 tabular-nums">
-              {new Date(a.date).toLocaleDateString("fa-IR")}
-            </div>
-            {a.evaluationType === "NUMERIC" ? (
-              <Badge variant="outline" className="text-[9px] mt-1 px-1 py-0">عددی</Badge>
-            ) : (
-              <Badge variant="outline" className="text-[9px] mt-1 px-1 py-0">توصیفی</Badge>
-            )}
-          </div>
-        ),
-        cell: ({ row }: { row: { original: MatrixStudent } }) => {
-          const grade = row.original.grades.find((g) => g.assessmentId === a.id);
-          return (
-            <GradeCellDisplay
-              grade={grade}
-              type={a.evaluationType}
-              onClick={() => {
-                setEditing({
-                  assessmentId: a.id,
-                  studentId: row.original.studentId,
-                  studentName: row.original.fullName,
-                  type: a.evaluationType,
-                });
-                setEditValue(
-                  grade?.isAbsent
-                    ? "absent"
-                    : a.evaluationType === "NUMERIC"
-                    ? grade?.numericScore?.toString() ?? ""
-                    : grade?.descriptiveScore ?? ""
-                );
-              }}
-            />
-          );
-        },
-      })),
-      // Monthly average column (per Section 7 — Moving Average)
-      {
-        id: "average",
-        header: () => (
-          <div className="text-center min-w-[70px]">
-            <TrendingUp className="h-3 w-3 mx-auto mb-0.5" />
-            <span className="text-xs">میانگین ۳۰ روز</span>
-          </div>
-        ),
-        cell: ({ row }) => {
-          const avg = row.original.monthlyAverage;
-          return (
-            <div className={cn(
-              "text-center text-sm font-bold tabular-nums",
-              averageColor(avg)
-            )}>
-              {toPersian(avg)}
-            </div>
-          );
-        },
-      },
-    ];
-    return cols;
-  }, [data, load]);
-
-  const table = useReactTable({
-    data: data?.students ?? [],
-    columns,
-    getCoreRowModel: getCoreRowModel(),
-  });
+    if (!searchQuery.trim()) return data.students;
+    const q = searchQuery.toLowerCase().trim();
+    return data.students.filter(s => s.fullName.toLowerCase().includes(q));
+  }, [data, searchQuery]);
 
   async function saveGrade() {
     if (!editing) return;
     setSaving(true);
-    try {
-      const body: Record<string, unknown> = {
-        assessmentId: editing.assessmentId,
-        studentUserId: editing.studentId,
-      };
-      if (editValue === "absent") {
-        body.isAbsent = true;
-      } else if (editing.type === "NUMERIC") {
-        body.numericScore = parseFloat(editValue);
-        if (isNaN(body.numericScore as number)) {
-          toast.error("نمره عددی معتبر نیست.");
+    let numericScore: number | null = null;
+    let descriptiveScore: string | null = null;
+
+    if (editValue !== "absent") {
+      if (editing.type === "NUMERIC") {
+        numericScore = parseFloat(editValue);
+        if (isNaN(numericScore) || numericScore < 0 || numericScore > 20) {
+          toast.error("نمره باید عددی بین ۰ و ۲۰ باشد.");
+          setSaving(false);
           return;
         }
       } else {
-        body.descriptiveScore = editValue;
+        descriptiveScore = editValue;
       }
-      const r = await fetch("/api/v1/grades", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-      const d = await r.json();
-      if (!d.ok) {
-        toast.error(d.error ?? "ذخیره ناموفق بود.");
-        return;
-      }
-      toast.success("نمره ذخیره شد.");
-      setEditing(null);
-      setEditValue("");
-      load();
-    } catch {
-      toast.error("خطا در برقراری ارتباط با سرور.");
-    } finally {
-      setSaving(false);
     }
-  }
 
-  async function createAssessment() {
-    if (!newAssessment.title) return;
-    setSaving(true);
     try {
-      const r = await fetch("/api/v1/assessments", {
+      const res = await fetch("/api/v1/grades", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          classRoomId: classId,
-          title: newAssessment.title,
-          evaluationType: newAssessment.evaluationType,
-          date: newAssessment.date,
+          assessmentId: editing.assessmentId,
+          studentUserId: editing.studentId,
+          numericScore,
+          descriptiveScore,
+          isAbsent: editValue === "absent",
         }),
       });
-      const d = await r.json();
-      if (!d.ok) {
-        toast.error(d.error ?? "ایجاد ارزیابی ناموفق بود.");
-        return;
+      const result = await res.json();
+      if (result.ok) {
+        toast.success("نمره با موفقیت ذخیره شد.");
+        setEditing(null);
+        load();
+      } else {
+        toast.error(result.error || "خطا در ذخیره نمره");
       }
-      toast.success("ارزیابی جدید ایجاد شد.");
-      setNewAssessment({
-        title: "",
-        evaluationType: "NUMERIC",
-        date: new Date().toISOString().slice(0, 10),
-      });
-      setDialogOpen(false);
-      load();
     } catch {
-      toast.error("خطا در برقراری ارتباط با سرور.");
+      toast.error("خطای شبکه در ارتباط با سرور");
     } finally {
       setSaving(false);
     }
@@ -346,146 +249,213 @@ export function GradebookGrid({ classId }: { classId: string }) {
     );
   }
 
-  if (!data) return null;
+  if (!data) {
+    return (
+      <div className="text-center py-20 text-muted-foreground space-y-2">
+        <p className="font-medium text-foreground">دفتر نمره بارگذاری نشد.</p>
+        <p className="text-sm">{error ?? "کلاس یافت نشد یا دسترسی ندارید."}</p>
+        <Button variant="outline" size="sm" className="mt-2" onClick={() => { setLoading(true); void load(); }}>
+          تلاش دوباره
+        </Button>
+      </div>
+    );
+  }
 
   return (
-    <div className="max-w-7xl mx-auto space-y-5">
+    <div className="max-w-6xl mx-auto space-y-5 pb-20">
       <PageHeader
-        title={`دفتر نمره — ${data.classroom.gradeLevel} ${data.classroom.name}`}
+        title={`دفتر نمره — ${data.classroom.gradeLevel} ${data.classroom.name} ${data.classroom.subjects?.length ? `(${data.classroom.subjects.join("، ")})` : ""}`}
         subtitle={
           <span className="tabular-nums">
-            {data.assessments.length.toLocaleString("fa-IR")} ارزیابی در ۳۰ روز گذشته • {data.students.length.toLocaleString("fa-IR")} دانش‌آموز
+            {data.assessments.length.toLocaleString("fa-IR")} ارزیابی کل ترم • {data.students.length.toLocaleString("fa-IR")} دانش‌آموز
           </span>
         }
         icon={BookOpen}
         actions={
-          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-            <DialogTrigger asChild>
-              <Button className="bg-emerald hover:bg-emerald-dark h-9 gap-2 shadow-sm cursor-pointer font-medium">
-                <Plus className="h-4 w-4" />
-                تعریف ارزیابی جدید
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-md">
-              <DialogHeader>
-                <DialogTitle className="text-navy">تعریف و ایجاد ارزیابی کلاسی</DialogTitle>
-                <DialogDescription>
-                  عنوان و نوع سنجش را مشخص کنید. پس از ایجاد، نمرات در جدول قابل ثبت خواهند بود.
-                </DialogDescription>
-              </DialogHeader>
-              <div className="space-y-3 py-1">
-                <div className="space-y-1.5">
-                  <Label className="text-xs font-medium">عنوان ارزیابی</Label>
-                  <Input
-                    value={newAssessment.title}
-                    onChange={(e) => setNewAssessment({ ...newAssessment, title: e.target.value })}
-                    placeholder="مثلاً پرسش کلاسی فصل ۲ یا آزمون میان‌ترم"
-                    className="h-9"
-                  />
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1.5">
-                    <Label className="text-xs font-medium">نوع نمره‌دهی</Label>
-                    <Select
-                      value={newAssessment.evaluationType}
-                      onValueChange={(v) => setNewAssessment({ ...newAssessment, evaluationType: v as any })}
-                    >
-                      <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="NUMERIC">عددی (۰ تا ۲۰)</SelectItem>
-                        <SelectItem value="DESCRIPTIVE">توصیفی (کیفی)</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-xs font-medium">تاریخ برگزاری</Label>
-                    <Input
-                      type="date"
-                      dir="ltr"
-                      className="font-mono text-left h-9 tabular-nums"
-                      value={newAssessment.date}
-                      onChange={(e) => setNewAssessment({ ...newAssessment, date: e.target.value })}
-                    />
-                  </div>
-                </div>
-              </div>
-              <DialogFooter className="gap-2">
-                <Button
-                  onClick={createAssessment}
-                  disabled={saving || !newAssessment.title}
-                  className="bg-emerald hover:bg-emerald-dark gap-2 cursor-pointer"
-                >
-                  {saving ? (
-                    <>
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      در حال ایجاد...
-                    </>
-                  ) : (
-                    "ایجاد و ثبت ارزیابی"
-                  )}
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setIsCreateModalOpen(true)}
+              className="h-8 gap-1.5 text-xs text-emerald-700 border-emerald/30 hover:bg-emerald/5 cursor-pointer"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">افزودن ارزیابی جدید</span>
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => router.push("/teacher/gradebook")}
+              className="h-8 gap-1.5 text-xs text-muted-foreground hover:text-navy hover:bg-muted/50 cursor-pointer"
+            >
+              <ArrowRight className="h-4 w-4" />
+              بازگشت
+            </Button>
+          </div>
         }
       />
 
-      {/* Matrix grid */}
-      <ScrollReveal>
-        <Card>
+      <ScrollReveal delay={30}>
+        <div className="relative">
+          <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input 
+            placeholder="جستجوی نام دانش‌آموز..." 
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="pl-3 pr-9 h-11 bg-white/50 backdrop-blur-sm"
+          />
+        </div>
+      </ScrollReveal>
+
+      <ScrollReveal delay={60}>
+        <Card className="overflow-hidden border-border/60">
           <CardContent className="p-0">
-            <div className="overflow-auto rounded-lg border max-h-[36rem]">
-              <Table>
-                <TableHeader className="sticky-table-header">
-                  {table.getHeaderGroups().map((hg) => (
-                    <TableRow key={hg.id} className="bg-muted/60 hover:bg-muted/60">
-                      {hg.headers.map((h) => {
-                        const isStudent = h.column.id === "student";
-                        return (
-                          <TableHead
-                            key={h.id}
-                            className={cn(
-                              "text-right border-l border-border last:border-l-0 bg-inherit p-2",
-                              isStudent && "sticky right-0 z-[15] bg-muted/80 backdrop-blur-sm"
+            <div className="overflow-x-auto" dir="rtl">
+              <table className="w-full text-sm text-right">
+                <thead className="bg-muted/40 border-b border-border/60 text-xs font-semibold text-muted-foreground">
+                  <tr>
+                    <th className="p-3 sticky right-0 z-10 bg-muted/95 backdrop-blur shadow-[-4px_0_12px_rgba(0,0,0,0.03)] border-l border-border/50">نام دانش‌آموز</th>
+                    <th className="p-3 whitespace-nowrap min-w-[120px] border-l border-border/50 text-center">ثبت انضباط</th>
+                    
+                    {data.sessions.map(s => (
+                      <th key={s.id} className="p-3 whitespace-nowrap min-w-[70px] text-center border-l border-border/50 font-normal bg-muted/20">
+                        <div className="font-medium text-navy">حضور و غیاب</div>
+                        <div className="text-[10px] opacity-70 mt-0.5">{toPersianDate(s.date)}</div>
+                      </th>
+                    ))}
+                    
+                    {data.assessments.map(a => (
+                      <th key={a.id} className="p-3 whitespace-nowrap min-w-[100px] text-center border-l border-border/50 font-normal">
+                        <div className="font-medium text-navy" title={a.title}>{a.title}</div>
+                        <div className="text-[10px] opacity-70 mt-0.5">{toPersianDate(a.date)}</div>
+                        {a.evaluationType === "NUMERIC" ? (
+                          <Badge variant="outline" className="text-[9px] mt-1 px-1 py-0 border-border/50">عددی</Badge>
+                        ) : (
+                          <Badge variant="outline" className="text-[9px] mt-1 px-1 py-0 border-border/50">توصیفی</Badge>
+                        )}
+                      </th>
+                    ))}
+                    
+                    <th className="p-3 whitespace-nowrap text-center text-destructive border-l border-border/50 min-w-[70px]">غیبت‌ها</th>
+                    <th className="p-3 whitespace-nowrap text-center min-w-[90px]">میانگین ترم</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border/50 bg-card">
+                  {filteredStudents.length === 0 ? (
+                    <tr>
+                      <td colSpan={data.assessments.length + 4} className="py-12 text-center text-muted-foreground">
+                        دانش‌آموزی یافت نشد.
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredStudents.map((student, idx) => {
+                      const totalPoints = student.behavioralPoints.positive - student.behavioralPoints.negative;
+                      
+                      return (
+                        <tr 
+                          key={student.studentId}
+                          className="transition-colors hover:bg-muted/20"
+                        >
+                          <td className="p-3 sticky right-0 z-10 bg-inherit shadow-[-4px_0_12px_rgba(0,0,0,0.03)] border-l border-border/50">
+                            <div className="flex items-center gap-2 min-w-[140px]">
+                              <span className="text-xs text-muted-foreground w-4 text-center font-mono tabular-nums opacity-60">
+                                {idx + 1}
+                              </span>
+                              <span className="font-bold text-sm text-navy">{student.fullName}</span>
+                              <Badge variant="secondary" className="mr-auto h-5 text-[10px] gap-1 px-1.5 bg-indigo-50 text-indigo-700 border-indigo-200">
+                                <Star className="h-3 w-3" />
+                                {totalPoints.toLocaleString("fa-IR")}
+                              </Badge>
+                            </div>
+                          </td>
+                          <td className="p-3 text-center border-l border-border/50 align-middle">
+                            <div className="flex justify-center">
+                              <QuickPointButtons
+                                studentUserId={student.studentId}
+                                studentName={student.fullName}
+                                subjectId={subjectId}
+                                size="sm"
+                                onSubmitted={(type) => {
+                                  setData((prev) => {
+                                    if (!prev) return prev;
+                                    return {
+                                      ...prev,
+                                      students: prev.students.map((s) => {
+                                        if (s.studentId === student.studentId) {
+                                          return {
+                                            ...s,
+                                            behavioralPoints: {
+                                              positive: s.behavioralPoints.positive + (type === "POSITIVE" ? 1 : 0),
+                                              negative: s.behavioralPoints.negative + (type === "NEGATIVE" ? 1 : 0),
+                                            }
+                                          };
+                                        }
+                                        return s;
+                                      })
+                                    };
+                                  });
+                                }}
+                              />
+                            </div>
+                          </td>
+                          
+                          {data.sessions.map(s => {
+                            const att = student.attendance.find(x => x.sessionId === s.id);
+                            const st = att?.status ?? "PRESENT";
+                            return (
+                              <td key={s.id} className="p-2 border-l border-border/50 text-center">
+                                <Badge variant="outline" className={cn(
+                                  "text-[10px]",
+                                  st === "PRESENT" ? "bg-emerald/10 text-emerald" :
+                                  st === "ABSENT" ? "bg-destructive/10 text-destructive" :
+                                  ""
+                                )}>
+                                  {st === "PRESENT" ? "حاضر" : "غایب"}
+                                </Badge>
+                              </td>
+                            );
+                          })}
+                          
+                          {data.assessments.map(a => {
+                            const grade = student.grades.find((g) => g.assessmentId === a.id);
+                            return (
+                              <td key={a.id} className="p-2 border-l border-border/50">
+                                <GradeCellDisplay 
+                                  grade={grade} 
+                                  type={a.evaluationType} 
+                                  onClick={() => {
+                                    setEditValue(grade?.isAbsent ? "absent" : a.evaluationType === "NUMERIC" ? (grade?.numericScore?.toString() || "") : (grade?.descriptiveScore || ""));
+                                    setEditing({
+                                      assessmentId: a.id,
+                                      studentId: student.studentId,
+                                      studentName: student.fullName,
+                                      assessmentTitle: a.title,
+                                      type: a.evaluationType
+                                    });
+                                  }}
+                                />
+                              </td>
+                            );
+                          })}
+
+                          <td className="p-3 text-center text-sm font-medium tabular-nums text-destructive border-l border-border/50 align-middle">
+                            {student.totalAbsences > 0 ? student.totalAbsences.toLocaleString("fa-IR") : "۰"}
+                          </td>
+                          <td className="p-3 text-center font-bold tabular-nums align-middle">
+                            {student.monthlyAverage !== null ? (
+                              <span className={averageColor(student.monthlyAverage)}>
+                                {student.monthlyAverage.toLocaleString("fa-IR", { maximumFractionDigits: 2 })}
+                              </span>
+                            ) : (
+                              <span className="text-muted-foreground/30 font-normal">—</span>
                             )}
-                          >
-                            {h.isPlaceholder ? null : flexRender(h.column.columnDef.header, h.getContext())}
-                          </TableHead>
-                        );
-                      })}
-                    </TableRow>
-                  ))}
-                </TableHeader>
-                <TableBody>
-                  {table.getRowModel().rows.map((row, idx) => (
-                    <TableRow
-                      key={row.id}
-                      className={cn(
-                        "stagger-item data-table-row bg-card",
-                        idx % 2 === 1 && "bg-muted/20"
-                      )}
-                      style={{ animationDelay: `${idx * 30}ms` }}
-                    >
-                      {row.getVisibleCells().map((cell) => {
-                        const isStudent = cell.column.id === "student";
-                        const isAverage = cell.column.id === "average";
-                        return (
-                          <TableCell
-                            key={cell.id}
-                            className={cn(
-                              "border-l border-border last:border-l-0 p-1.5 align-middle",
-                              isStudent && "sticky right-0 z-[5] bg-inherit",
-                              isAverage && "font-bold"
-                            )}
-                          >
-                            {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                          </TableCell>
-                        );
-                      })}
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
             </div>
           </CardContent>
         </Card>
@@ -576,6 +546,77 @@ export function GradebookGrid({ classId }: { classId: string }) {
               ) : (
                 "ذخیره نمره دانش‌آموز"
               )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+
+      {/* Create Assessment Dialog */}
+      <Dialog open={isCreateModalOpen} onOpenChange={setIsCreateModalOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-navy">افزودن ارزیابی جدید</DialogTitle>
+            <DialogDescription>
+              با ایجاد این ارزیابی، یک ستون جدید در دفتر نمره برای ثبت نمرات این آزمون ایجاد می‌شود.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">عنوان ارزیابی (مثل: آزمون میان‌ترم)</label>
+              <Input
+                value={newAssessmentTitle}
+                onChange={(e) => setNewAssessmentTitle(e.target.value)}
+                placeholder="عنوان ارزیابی..."
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">تاریخ ارزیابی</label>
+              <PersianDatePicker
+                value={newAssessmentDate}
+                onChange={setNewAssessmentDate}
+                placeholder="انتخاب تاریخ..."
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">نوع ارزیابی</label>
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant={newAssessmentType === "NUMERIC" ? "default" : "outline"}
+                  onClick={() => setNewAssessmentType("NUMERIC")}
+                  className={cn("flex-1 cursor-pointer", newAssessmentType === "NUMERIC" && "bg-navy hover:bg-navy-light")}
+                >
+                  عددی (۰ تا ۲۰)
+                </Button>
+                <Button
+                  type="button"
+                  variant={newAssessmentType === "DESCRIPTIVE" ? "default" : "outline"}
+                  onClick={() => setNewAssessmentType("DESCRIPTIVE")}
+                  className={cn("flex-1 cursor-pointer", newAssessmentType === "DESCRIPTIVE" && "bg-navy hover:bg-navy-light")}
+                >
+                  توصیفی
+                </Button>
+              </div>
+            </div>
+          </div>
+          <DialogFooter className="gap-2 sm:justify-start">
+            <Button
+              onClick={handleCreateAssessment}
+              disabled={creatingAssessment || !newAssessmentTitle.trim() || !newAssessmentDate}
+              className="bg-emerald hover:bg-emerald-dark gap-2 cursor-pointer w-full sm:w-auto"
+            >
+              {creatingAssessment ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  در حال ایجاد...
+                </>
+              ) : (
+                "ایجاد ستون ارزیابی"
+              )}
+            </Button>
+            <Button variant="outline" onClick={() => setIsCreateModalOpen(false)} className="cursor-pointer w-full sm:w-auto">
+              انصراف
             </Button>
           </DialogFooter>
         </DialogContent>

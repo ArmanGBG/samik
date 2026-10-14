@@ -16,7 +16,7 @@ const UpdateBody = z.object({
  * academic year.
  */
 export async function PATCH(req: NextRequest) {
-  return withTenantContext(req, ["PRINCIPAL", "DEPUTY"], async () => {
+  return withTenantContext(req, ["PRINCIPAL", "DEPUTY"], async (ctx) => {
     let body: z.infer<typeof UpdateBody>;
     try {
       body = UpdateBody.parse(await req.json());
@@ -26,14 +26,8 @@ export async function PATCH(req: NextRequest) {
         { status: 400 }
       );
     }
-    // We're updating the School record itself. The tenant-extension's
-    // create/update hooks inject `id: schoolId` for the School model when
-    // querying by id, so we use update with where: { id } (current schoolId
-    // is in the tenant context, will be enforced).
-    // We need to bypass the tenant filter for this School update because
-    // the School model's "tenant" is itself.
     const updated = await db.school.update({
-      where: { id: req.headers.get("x-samik-school-id")! },
+      where: { id: ctx.schoolId },
       data: { termStartDate: body.termStartDate ? new Date(body.termStartDate) : null },
       select: { id: true, name: true, termStartDate: true },
     });
@@ -47,10 +41,15 @@ export async function PATCH(req: NextRequest) {
  * Returns the school's termStartDate and other principal-level config.
  */
 export async function GET(req: NextRequest) {
-  return withTenantContext(req, ["PRINCIPAL", "DEPUTY", "TEACHER"], async () => {
-    const school = await db.school.findFirst({
-      select: { id: true, name: true, subdomain: true, termStartDate: true, status: true },
-    });
+  return withTenantContext(req, ["PRINCIPAL", "DEPUTY", "TEACHER"], async (ctx) => {
+    const school = ctx.schoolId
+      ? await db.school.findUnique({
+          where: { id: ctx.schoolId },
+          select: { id: true, name: true, subdomain: true, termStartDate: true, status: true },
+        })
+      : await db.school.findFirst({
+          select: { id: true, name: true, subdomain: true, termStartDate: true, status: true },
+        });
     return NextResponse.json({ ok: true, school });
   });
 }

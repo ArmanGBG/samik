@@ -36,7 +36,15 @@ import {
   ChevronDown,
   ChevronsUpDown,
   AlertCircle,
+  Pencil,
 } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { PageHeader } from "@/components/shared/page-header";
 import { EmptyState } from "@/components/shared/empty-state";
@@ -59,7 +67,13 @@ function durationMinutes(start: string, end: string): number {
   return eh * 60 + em - (sh * 60 + sm);
 }
 
-export function BellSchedulesManager() {
+export function BellSchedulesManager({
+  schoolId,
+  hideHeader = false,
+}: {
+  schoolId?: string;
+  hideHeader?: boolean;
+} = {}) {
   const [bells, setBells] = useState<Bell[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -71,10 +85,16 @@ export function BellSchedulesManager() {
   const [sortKey, setSortKey] = useState<SortKey>("startTime");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
 
+  // Edit state
+  const [editingBell, setEditingBell] = useState<Bell | null>(null);
+  const [editSubmitting, setEditSubmitting] = useState(false);
+  const [editForm, setEditForm] = useState({ title: "", startTime: "", endTime: "" });
+
   async function load() {
     setLoading(true);
     try {
-      const r = await fetch("/api/v1/principal/bell-schedules");
+      const qs = schoolId ? `?schoolId=${schoolId}` : "";
+      const r = await fetch(`/api/v1/principal/bell-schedules${qs}`);
       const d = await r.json();
       if (d.ok) setBells(d.bellSchedules);
     } catch (err) {
@@ -87,13 +107,14 @@ export function BellSchedulesManager() {
 
   useEffect(() => {
     load();
-  }, []);
+  }, [schoolId]);
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
     setSubmitting(true);
     try {
-      const r = await fetch("/api/v1/principal/bell-schedules", {
+      const qs = schoolId ? `?schoolId=${schoolId}` : "";
+      const r = await fetch(`/api/v1/principal/bell-schedules${qs}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(form),
@@ -116,7 +137,8 @@ export function BellSchedulesManager() {
   async function onDelete(id: string, title: string) {
     if (!confirm(`حذف زنگ «${title}»؟`)) return;
     try {
-      const r = await fetch(`/api/v1/principal/bell-schedules?id=${id}`, {
+      const qs = schoolId ? `&schoolId=${schoolId}` : "";
+      const r = await fetch(`/api/v1/principal/bell-schedules?id=${id}${qs}`, {
         method: "DELETE",
       });
       const d = await r.json();
@@ -128,6 +150,37 @@ export function BellSchedulesManager() {
       load();
     } catch {
       toast.error("خطا در برقراری ارتباط با سرور.");
+    }
+  }
+
+  function openEditBell(bell: Bell) {
+    setEditingBell(bell);
+    setEditForm({ title: bell.title, startTime: bell.startTime, endTime: bell.endTime });
+  }
+
+  async function onEditBell(e: FormEvent) {
+    e.preventDefault();
+    if (!editingBell) return;
+    setEditSubmitting(true);
+    try {
+      const qs = schoolId ? `&schoolId=${schoolId}` : "";
+      const r = await fetch(`/api/v1/principal/bell-schedules?id=${editingBell.id}${qs}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(editForm),
+      });
+      const d = await r.json();
+      if (!d.ok) {
+        toast.error(d.error ?? "ویرایش ناموفق بود.");
+        return;
+      }
+      toast.success(`زنگ «${editForm.title}» ویرایش شد.`);
+      setEditingBell(null);
+      load();
+    } catch {
+      toast.error("خطا در برقراری ارتباط با سرور.");
+    } finally {
+      setEditSubmitting(false);
     }
   }
 
@@ -176,12 +229,14 @@ export function BellSchedulesManager() {
   }, [bells, sortKey, sortDir]);
 
   return (
-    <div className="max-w-6xl mx-auto space-y-6">
-      <PageHeader
-        title="زنگ‌های مدرسه"
-        subtitle="تعریف ساعات شروع و پایان هر زنگ. زمان‌ها در قالب ۲۴ ساعته (HH:mm) ذخیره می‌شوند."
-        icon={Clock}
-      />
+    <div className="max-w-6xl mx-auto space-y-4">
+      {!hideHeader && (
+        <PageHeader
+          title="زنگ‌های مدرسه"
+          subtitle="تعریف ساعات شروع و پایان هر زنگ. زمان‌ها در قالب ۲۴ ساعته (HH:mm) ذخیره می‌شوند."
+          icon={Clock}
+        />
+      )}
 
       <Card>
         <CardHeader>
@@ -364,27 +419,45 @@ export function BellSchedulesManager() {
                             {b.slotCount.toLocaleString("fa-IR")}
                           </TableCell>
                           <TableCell>
-                            <TooltipProvider delayDuration={150}>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() => onDelete(b.id, b.title)}
-                                    disabled={b.slotCount > 0}
-                                    className="text-destructive hover:text-destructive hover:bg-destructive/10 cursor-pointer h-8 w-8 p-0 disabled:opacity-40 disabled:cursor-not-allowed"
-                                    aria-label={`حذف زنگ ${b.title}`}
-                                  >
-                                    <Trash2 className="h-4 w-4" />
-                                  </Button>
-                                </TooltipTrigger>
-                                <TooltipContent side="top">
-                                  {b.slotCount > 0
-                                    ? "این زنگ در برنامهٔ هفتگی استفاده شده و قابل حذف نیست."
-                                    : `حذف زنگ «${b.title}»`}
-                                </TooltipContent>
-                              </Tooltip>
-                            </TooltipProvider>
+                            <div className="flex items-center gap-1">
+                              <TooltipProvider delayDuration={150}>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={() => openEditBell(b)}
+                                      className="text-navy hover:text-navy hover:bg-navy/10 cursor-pointer h-8 w-8 p-0"
+                                      aria-label={`ویرایش زنگ ${b.title}`}
+                                    >
+                                      <Pencil className="h-4 w-4" />
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent side="top">ویرایش زمان زنگ</TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+                              <TooltipProvider delayDuration={150}>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={() => onDelete(b.id, b.title)}
+                                      disabled={b.slotCount > 0}
+                                      className="text-destructive hover:text-destructive hover:bg-destructive/10 cursor-pointer h-8 w-8 p-0 disabled:opacity-40 disabled:cursor-not-allowed"
+                                      aria-label={`حذف زنگ ${b.title}`}
+                                    >
+                                      <Trash2 className="h-4 w-4" />
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent side="top">
+                                    {b.slotCount > 0
+                                      ? "این زنگ در برنامهٔ هفتگی استفاده شده و قابل حذف نیست."
+                                      : `حذف زنگ «${b.title}»`}
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+                            </div>
                           </TableCell>
                         </TableRow>
                       );
@@ -396,6 +469,59 @@ export function BellSchedulesManager() {
           )}
         </CardContent>
       </Card>
+
+      {/* ── Edit Bell Dialog ── */}
+      <Dialog open={!!editingBell} onOpenChange={(open) => { if (!open) setEditingBell(null); }}>
+        <DialogContent dir="rtl" className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="text-navy">ویرایش زنگ</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={onEditBell} className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium">عنوان زنگ</Label>
+              <Input
+                value={editForm.title}
+                onChange={(e) => setEditForm({ ...editForm, title: e.target.value })}
+                required
+                maxLength={50}
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label className="text-xs font-medium">شروع</Label>
+                <Input
+                  type="time"
+                  dir="ltr"
+                  className="font-mono text-left tabular-nums"
+                  value={editForm.startTime}
+                  onChange={(e) => setEditForm({ ...editForm, startTime: e.target.value })}
+                  required
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs font-medium">پایان</Label>
+                <Input
+                  type="time"
+                  dir="ltr"
+                  className="font-mono text-left tabular-nums"
+                  value={editForm.endTime}
+                  onChange={(e) => setEditForm({ ...editForm, endTime: e.target.value })}
+                  required
+                />
+              </div>
+            </div>
+            <DialogFooter className="gap-2 flex-row-reverse justify-start">
+              <Button type="submit" disabled={editSubmitting} className="bg-navy hover:bg-navy-dark gap-2">
+                {editSubmitting && <Loader2 className="h-4 w-4 animate-spin" />}
+                ذخیره
+              </Button>
+              <Button type="button" variant="outline" onClick={() => setEditingBell(null)}>
+                انصراف
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -440,3 +566,5 @@ function SortableHead({
     </TableHead>
   );
 }
+
+// 1790852921

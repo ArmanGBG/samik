@@ -51,7 +51,7 @@ export async function GET(req: NextRequest) {
 
   // For SUPER_ADMIN, there is no school record — return null school.
   // The auth-store handles this case.
-  let school = null;
+  let school: { id: string; name: string; subdomain: string } | null = null;
   if (payload.schoolId !== "__global__") {
     school = await runWithTenant({ bypassTenantFilter: true }, () =>
       db.school.findUnique({
@@ -63,6 +63,8 @@ export async function GET(req: NextRequest) {
     school = { id: "__global__", name: "پلتفرم سامیک", subdomain: "platform" };
   }
 
+  const profiles = await buildUserProfiles(payload.userId);
+
   return NextResponse.json({
     ok: true,
     kind: "contextual",
@@ -70,5 +72,6 @@ export async function GET(req: NextRequest) {
     school,
     role: payload.role,
     studentEnrollmentId: payload.studentEnrollmentId,
+    profiles,
   });
 }

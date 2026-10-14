@@ -26,10 +26,10 @@ export async function POST(req: NextRequest) {
   if (!cookieToken) {
     return NextResponse.json({ ok: false, error: "نشست فعال نیست." }, { status: 401 });
   }
-  const rootPayload = await verifyToken(cookieToken);
-  if (!rootPayload || rootPayload.kind !== "root") {
+  const tokenPayload = await verifyToken(cookieToken);
+  if (!tokenPayload || (tokenPayload.kind !== "root" && tokenPayload.kind !== "contextual")) {
     return NextResponse.json(
-      { ok: false, error: "توکن ریشه معتبر نیست. لطفاً مجدداً وارد شوید." },
+      { ok: false, error: "توکن معتبر نیست. لطفاً مجدداً وارد شوید." },
       { status: 401 }
     );
   }
@@ -39,13 +39,13 @@ export async function POST(req: NextRequest) {
     body = Body.parse(await req.json());
   } catch (e) {
     return NextResponse.json(
-      { ok: false, error: (e as z.ZodError).errors?.[0]?.message ?? "ورودی نامعتبر" },
+      { ok: false, error: (e as any).issues?.[0]?.message ?? (e as any).errors?.[0]?.message ?? "ورودی نامعتبر" },
       { status: 400 }
     );
   }
 
   // Re-verify from DB (token claims alone are not trusted for authorization)
-  const profiles = await buildUserProfiles(rootPayload.userId);
+  const profiles = await buildUserProfiles(tokenPayload.userId);
   const match = profiles.find(
     (p) =>
       p.schoolId === body.schoolId &&
@@ -63,7 +63,7 @@ export async function POST(req: NextRequest) {
   // The `withSuperAdmin()` helper in tenant-guard.ts handles SUPER_ADMIN
   // routes by running with bypassTenantFilter=true.
   const token = await signContextualToken({
-    userId: rootPayload.userId,
+    userId: tokenPayload.userId,
     schoolId: body.role === "SUPER_ADMIN" ? "__global__" : body.schoolId,
     role: body.role,
     studentEnrollmentId: body.studentEnrollmentId,

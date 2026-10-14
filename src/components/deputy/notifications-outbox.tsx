@@ -40,6 +40,7 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { toPersianDateTime } from "@/lib/date-utils";
 import { PageHeader } from "@/components/shared/page-header";
 import { KpiCardGrid } from "@/components/shared/kpi-card";
 import { ScrollReveal } from "@/components/shared/scroll-reveal";
@@ -334,8 +335,8 @@ export function NotificationsOutbox() {
                           </span>
                           <span className="text-xs text-muted-foreground flex items-center gap-1">
                             <span>•</span>
-                            <span dir="ltr" className="tabular-nums font-mono">
-                              {new Date(item.createdAt).toLocaleTimeString("fa-IR")}
+                            <span className="tabular-nums font-mono text-[11px]">
+                              {toPersianDateTime(item.createdAt)}
                             </span>
                           </span>
                         </div>

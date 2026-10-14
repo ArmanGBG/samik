@@ -36,7 +36,7 @@ export async function POST(req: NextRequest) {
     body = Body.parse(await req.json());
   } catch (e) {
     return NextResponse.json(
-      { ok: false, error: (e as z.ZodError).errors?.[0]?.message ?? "ورودی نامعتبر" },
+      { ok: false, error: (e as z.ZodError).issues?.[0]?.message ?? "ورودی نامعتبر" },
       { status: 400 }
     );
   }

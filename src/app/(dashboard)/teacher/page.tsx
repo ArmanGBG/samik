@@ -3,5 +3,9 @@ import { TeacherCurrentSession } from "@/components/dashboard/teacher-current-se
 export const metadata = { title: "داشبورد معلم | سامیک" };
 
 export default function TeacherDashboard() {
-  return <TeacherCurrentSession />;
+  return (
+    <div className="space-y-6">
+      <TeacherCurrentSession />
+      </div>
+  );
 }

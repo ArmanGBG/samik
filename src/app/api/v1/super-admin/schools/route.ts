@@ -115,6 +115,91 @@ export async function POST(req: NextRequest) {
  */
 export async function GET(req: NextRequest) {
   return withSuperAdmin(req, async () => {
+    const id = req.nextUrl.searchParams.get("id");
+    if (id) {
+      const school = await db.school.findUnique({
+        where: { id },
+        include: {
+          staffEmployments: {
+            include: {
+              user: {
+                select: {
+                  id: true,
+                  firstName: true,
+                  lastName: true,
+                  phoneNumber: true,
+                  nationalCode: true,
+                },
+              },
+            },
+            orderBy: [{ role: "asc" }, { createdAt: "desc" }],
+          },
+          classrooms: {
+            where: { deletedAt: null },
+            include: {
+              _count: {
+                select: { enrollments: true },
+              },
+            },
+            orderBy: [{ gradeLevel: "asc" }, { name: "asc" }],
+          },
+          subjects: {
+            orderBy: { title: "asc" },
+          },
+          bellSchedules: {
+            orderBy: { startTime: "asc" },
+          },
+          enrollments: {
+            include: {
+              student: {
+                select: {
+                  id: true,
+                  firstName: true,
+                  lastName: true,
+                  phoneNumber: true,
+                  nationalCode: true,
+                },
+              },
+              classRoom: {
+                select: {
+                  id: true,
+                  name: true,
+                  gradeLevel: true,
+                },
+              },
+            },
+            orderBy: { createdAt: "desc" },
+            take: 200,
+          },
+          _count: {
+            select: {
+              staffEmployments: true,
+              enrollments: true,
+              classrooms: true,
+              subjects: true,
+              bellSchedules: true,
+            },
+          },
+        },
+      });
+
+      if (!school) {
+        return NextResponse.json({ ok: false, error: "مدرسه مورد نظر یافت نشد." }, { status: 404 });
+      }
+
+      // _count.classrooms from Prisma does NOT respect soft-delete filter on
+      // nested _count selects. Override it with the already-filtered list length.
+      const schoolWithFixedCount = {
+        ...school,
+        _count: {
+          ...school._count,
+          classrooms: school.classrooms.length,
+        },
+      };
+
+      return NextResponse.json({ ok: true, school: schoolWithFixedCount });
+    }
+
     const schools = await db.school.findMany({
       orderBy: { createdAt: "desc" },
       select: {
@@ -124,6 +209,19 @@ export async function GET(req: NextRequest) {
         status: true,
         smsBalance: true,
         createdAt: true,
+        staffEmployments: {
+          where: { role: "PRINCIPAL" },
+          select: {
+            user: {
+              select: {
+                firstName: true,
+                lastName: true,
+                phoneNumber: true,
+              },
+            },
+          },
+          take: 1,
+        },
         _count: {
           select: {
             staffEmployments: true,
@@ -133,7 +231,19 @@ export async function GET(req: NextRequest) {
         },
       },
     });
-    return NextResponse.json({ ok: true, schools });
+
+    const mappedSchools = schools.map((s) => ({
+      id: s.id,
+      name: s.name,
+      subdomain: s.subdomain,
+      status: s.status,
+      smsBalance: s.smsBalance,
+      createdAt: s.createdAt,
+      principal: s.staffEmployments[0]?.user ?? null,
+      _count: s._count,
+    }));
+
+    return NextResponse.json({ ok: true, schools: mappedSchools });
   });
 }
 

@@ -1,10 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
+
+export const dynamic = "force-dynamic";
 import { z } from "zod";
 import { withTenantContext } from "@/lib/middleware-helpers/tenant-guard";
 import { db } from "@/lib/db";
 import { calculateWeekParity, weekTypeMatches } from "@/lib/timetable/week-parity";
-import { currentSamikDayOfWeek } from "@/lib/timetable/days";
-import { HH_MM_REGEX, hhmmToPersian } from "@/lib/timetable/time-utils";
+import { tehranNowParts } from "@/lib/timetable/tehran-time";
+import {
+  HH_MM_REGEX,
+  DEFAULT_EARLY_TOLERANCE_MINUTES,
+  DEFAULT_LATE_TOLERANCE_MINUTES,
+  hhmmToPersian,
+  isSlotActiveNow,
+} from "@/lib/timetable/time-utils";
 
 const QuerySchema = z.object({
   /**
@@ -54,8 +62,12 @@ export async function GET(req: NextRequest) {
     const teacherUserId = ctx.userId;
     const schoolId = ctx.schoolId;
 
-    // Get the school's termStartDate for week-parity calculation
-    const todaySamikDay = currentSamikDayOfWeek(now);
+    // Resolve the school's wall clock ONCE. `now` is an absolute instant;
+    // the timetable is authored in Tehran wall-clock time, so every
+    // day-of-week / date / time comparison below uses these parts rather than
+    // the host timezone.
+    const tehran = tehranNowParts(now);
+    const todaySamikDay = tehran.samikDayOfWeek;
     let school, todaysSlots;
     try {
       school = await db.school.findFirst({
@@ -85,42 +97,32 @@ export async function GET(req: NextRequest) {
     }
 
     const parityResult = calculateWeekParity(school.termStartDate, now);
-    const nowHHmm =
-      String(now.getHours()).padStart(2, "0") +
-      ":" +
-      String(now.getMinutes()).padStart(2, "0");
+    const nowHHmm = tehran.hhmm;
 
     if (!HH_MM_REGEX.test(nowHHmm)) {
       return NextResponse.json({ ok: false, error: "خطای محاسبه زمان." }, { status: 500 });
     }
 
-    // Filter by weekType matching current parity
-    const parityMatched = todaysSlots.filter((s) => weekTypeMatches(s.weekType, parityResult));
+    // Filter by weekType matching current parity (ALL_WEEKS / ODD / EVEN /
+    // SINGLE_SESSION on today's date).
+    const parityMatched = todaysSlots.filter((s) =>
+      weekTypeMatches(s.weekType, parityResult, s.specificDate, tehran.dateKey)
+    );
 
-    // Find the active session: current time within [startTime, endTime]
-    // with a 15-minute tolerance BEFORE startTime (teacher can open the
-    // roll-call early per Section 5).
-    const TOLERANCE_MINUTES = 15;
-    const nowMinutes = now.getHours() * 60 + now.getMinutes();
-    let activeSlot: (typeof parityMatched)[number] | null = null;
-    for (const slot of parityMatched) {
-      if (!HH_MM_REGEX.test(slot.bellSchedule.startTime) || !HH_MM_REGEX.test(slot.bellSchedule.endTime)) {
-        continue;
-      }
-      const [sh, sm] = slot.bellSchedule.startTime.split(":").map(Number);
-      const [eh, em] = slot.bellSchedule.endTime.split(":").map(Number);
-      const startMin = sh * 60 + sm;
-      const endMin = eh * 60 + em;
-      // Active if now >= start - 15min AND now < end
-      if (nowMinutes >= startMin - TOLERANCE_MINUTES && nowMinutes < endMin) {
-        activeSlot = slot;
-        break;
-      }
-    }
+    // Find the active session via the shared helper, so the teacher dashboard
+    // and the deputy live dashboard always agree.
+    const activeSlot =
+      parityMatched.find((slot) =>
+        isSlotActiveNow(
+          { startTime: slot.bellSchedule.startTime, endTime: slot.bellSchedule.endTime },
+          { minutesOfDay: tehran.minutesOfDay }
+        )
+      ) ?? null;
 
     // Build the agenda (all matched slots for today, for fallback rendering)
     const agenda = parityMatched.map((s) => ({
       slotId: s.id,
+      subjectId: s.subjectId,
       subjectTitle: s.subject.title,
       classroomName: `${s.classRoom.gradeLevel} ${s.classRoom.name}`,
       classRoomId: s.classRoom.id,
@@ -138,12 +140,14 @@ export async function GET(req: NextRequest) {
         now: now.toISOString(),
         nowHHmm,
         nowHHmmFa: hhmmToPersian(nowHHmm),
+        todayDateKey: tehran.dateKey,
         todaySamikDay,
         parity: parityResult.isUnconfigured ? null : parityResult.parity,
         weekNumber: parityResult.weekNumber,
         isPreTerm: parityResult.isPreTerm,
         isUnconfigured: parityResult.isUnconfigured,
-        toleranceMinutes: TOLERANCE_MINUTES,
+        toleranceMinutes: DEFAULT_EARLY_TOLERANCE_MINUTES,
+        lateToleranceMinutes: DEFAULT_LATE_TOLERANCE_MINUTES,
       },
       school: {
         id: school.id,
@@ -154,6 +158,7 @@ export async function GET(req: NextRequest) {
         ? {
             slotId: activeSlot.id,
             classRoomId: activeSlot.classRoom.id,
+            subjectId: activeSlot.subjectId,
             classRoomName: `${activeSlot.classRoom.gradeLevel} ${activeSlot.classRoom.name}`,
             subjectTitle: activeSlot.subject.title,
             bellTitle: activeSlot.bellSchedule.title,

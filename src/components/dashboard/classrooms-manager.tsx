@@ -50,7 +50,10 @@ import {
   ChevronUp,
   ChevronDown,
   ChevronsUpDown,
+  CalendarClock,
+  ClipboardCheck
 } from "lucide-react";
+import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { safeJsonResponse } from "@/lib/safe-fetch";
 import { PageHeader } from "@/components/shared/page-header";
@@ -494,6 +497,38 @@ export function ClassRoomsManager() {
                       <TableCell>
                         <div className="flex items-center justify-center gap-1">
                           <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Link href={`/principal/timetable?classId=${r.id}`}>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="text-navy hover:text-navy hover:bg-navy/10 h-8 w-8 p-0 cursor-pointer"
+                                    aria-label={`برنامه هفتگی کلاس ${r.gradeLevel} ${r.name}`}
+                                  >
+                                    <CalendarClock className="h-4 w-4" />
+                                  </Button>
+                                </Link>
+                              </TooltipTrigger>
+                              <TooltipContent>برنامه هفتگی این کلاس</TooltipContent>
+                            </Tooltip>
+                            
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Link href={`/teacher/gradebook/${r.id}`}>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="text-emerald hover:text-emerald hover:bg-emerald/10 h-8 w-8 p-0 cursor-pointer"
+                                    aria-label={`سابقه جلسات کلاس ${r.gradeLevel} ${r.name}`}
+                                  >
+                                    <ClipboardCheck className="h-4 w-4" />
+                                  </Button>
+                                </Link>
+                              </TooltipTrigger>
+                              <TooltipContent>سابقه جلسات و نمرات</TooltipContent>
+                            </Tooltip>
+
                             <Tooltip>
                               <TooltipTrigger asChild>
                                 <Button
