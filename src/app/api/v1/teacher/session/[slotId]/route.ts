@@ -36,33 +36,53 @@ export async function GET(
     const todayStr = tehranDateKey();
     const todayDate = new Date(todayStr + "T00:00:00Z"); // Start of today in UTC
 
-    // 2. Fetch Active Students
+    // 1.5 If slot is part of a merged group, find peer slots in the same group
+    const mergedSlots = slot.mergedGroupId
+      ? await db.timetableSlot.findMany({
+          where: {
+            mergedGroupId: slot.mergedGroupId,
+            schoolId: ctx.schoolId,
+          },
+          include: {
+            classRoom: true,
+          },
+        })
+      : [slot];
+
+    const mergedClassroomIds = Array.from(new Set(mergedSlots.map((s) => s.classRoomId)));
+    const mergedSlotIds = mergedSlots.map((s) => s.id);
+
+    // 2. Fetch Active Students across all merged classrooms
     const enrollments = await db.schoolEnrollment.findMany({
-      where: { classRoomId: slot.classRoomId, status: "ACTIVE" },
+      where: { classRoomId: { in: mergedClassroomIds }, status: "ACTIVE" },
       include: {
         student: {
           select: { id: true, firstName: true, lastName: true },
         },
+        classRoom: {
+          select: { id: true, name: true, gradeLevel: true },
+        },
       },
-      orderBy: { student: { lastName: "asc" } },
+      orderBy: [{ classRoom: { name: "asc" } }, { student: { lastName: "asc" } }],
     });
     const studentIds = enrollments.map(e => e.studentUserId);
 
-    // 3. Fetch Today's ClassSession for this slot (which holds AttendanceRecords)
-    const classSession = await db.classSession.findFirst({
+    // 3. Fetch Today's ClassSession for this slot (and peers)
+    const classSessions = await db.classSession.findMany({
       where: {
-        timetableSlotId: slot.id,
+        timetableSlotId: { in: mergedSlotIds },
         date: todayDate,
       },
       include: {
         attendanceRecords: true,
       },
     });
+    const allAttendanceRecords = classSessions.flatMap((cs) => cs.attendanceRecords);
 
-    // 4. Fetch Today's Daily Assessment for this classroom/subject
+    // 4. Fetch Today's Daily Assessment for these classrooms/subject
     const dailyAssessment = await db.assessment.findFirst({
       where: {
-        classRoomId: slot.classRoomId,
+        classRoomId: { in: mergedClassroomIds },
         subjectId: slot.subjectId,
         teacherUserId: ctx.userId,
         date: todayDate,
@@ -76,8 +96,6 @@ export async function GET(
     });
 
     // 4.5 Fetch behavioral points sum & previous grades for context
-    // Total behavioral points — scoped to this subject so a point given in
-    // another lesson (same teacher, same class) is not counted here.
     const pointsData = await db.behavioralPoint.findMany({
       where: { studentUserId: { in: studentIds }, subjectId: slot.subjectId },
       select: { studentUserId: true, pointType: true }
@@ -93,7 +111,7 @@ export async function GET(
     threeWeeksAgo.setDate(threeWeeksAgo.getDate() - 21);
     const recentAssessments = await db.assessment.findMany({
       where: {
-        classRoomId: slot.classRoomId,
+        classRoomId: { in: mergedClassroomIds },
         subjectId: slot.subjectId,
         teacherUserId: ctx.userId,
         date: { lt: todayDate, gte: threeWeeksAgo },
@@ -108,11 +126,9 @@ export async function GET(
       
       // Attendance State
       let attendanceState = "PRESENT"; // Default
-      if (classSession) {
-        const record = classSession.attendanceRecords.find(r => r.studentUserId === studentId);
-        if (record) {
-          attendanceState = record.status;
-        }
+      const record = allAttendanceRecords.find(r => r.studentUserId === studentId);
+      if (record) {
+        attendanceState = record.status;
       }
 
       // Grade
@@ -139,12 +155,18 @@ export async function GET(
         };
       });
 
+      const studentClassroom = enr.classRoom
+        ? `${enr.classRoom.gradeLevel} ${enr.classRoom.name}`
+        : "";
+
       return {
         id: studentId,
         enrollmentId: enr.id,
         firstName: enr.student.firstName,
         lastName: enr.student.lastName,
         fullName: `${enr.student.firstName} ${enr.student.lastName}`,
+        classroomName: studentClassroom,
+        classRoomId: enr.classRoom?.id ?? "",
         attendanceState,
         totalPoints: pointsMap.get(studentId) ?? 0,
         historicalGrades,
@@ -156,6 +178,11 @@ export async function GET(
       };
     });
 
+    const isMerged = mergedSlots.length > 1;
+    const compositeClassroomName = isMerged
+      ? mergedSlots.map((s) => `${s.classRoom.gradeLevel} ${s.classRoom.name}`).join(" + ")
+      : `${slot.classRoom.gradeLevel} ${slot.classRoom.name}`;
+
     return NextResponse.json({
       ok: true,
       slot: {
@@ -164,8 +191,11 @@ export async function GET(
         // The client needs the id to create the daily activity assessment;
         // it previously read `slot.subject.id`, which this payload never had.
         subjectId: slot.subject.id,
-        classroomName: `${slot.classRoom.gradeLevel} ${slot.classRoom.name}`,
+        classroomName: compositeClassroomName,
         classRoomId: slot.classRoomId,
+        isMerged,
+        mergedClassroomIds,
+        mergedSlotIds,
         bellTitle: slot.bellSchedule.title,
         startTime: slot.bellSchedule.startTime,
         endTime: slot.bellSchedule.endTime,

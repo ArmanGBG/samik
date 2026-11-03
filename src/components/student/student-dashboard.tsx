@@ -35,6 +35,17 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import { toast } from "sonner";
 import {
   Loader2,
@@ -45,6 +56,8 @@ import {
   Award,
   History,
   GraduationCap,
+  KeyRound,
+  Lock,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toPersianDate } from "@/lib/date-utils";
@@ -116,6 +129,50 @@ export function StudentDashboard() {
   const [activeEnrollment, setActiveEnrollment] = useState<string>("");
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
+
+  // Change password modal state
+  const [changePwdOpen, setChangePwdOpen] = useState(false);
+  const [currentPwd, setCurrentPwd] = useState("");
+  const [newPwd, setNewPwd] = useState("");
+  const [confirmPwd, setConfirmPwd] = useState("");
+  const [savingPwd, setSavingPwd] = useState(false);
+
+  async function handleChangePassword(e: React.FormEvent) {
+    e.preventDefault();
+    if (newPwd.length < 4) {
+      toast.error("رمز عبور جدید باید حداقل ۴ نویسه باشد.");
+      return;
+    }
+    if (newPwd !== confirmPwd) {
+      toast.error("رمز عبور جدید و تکرار آن یکسان نیستند.");
+      return;
+    }
+    setSavingPwd(true);
+    try {
+      const res = await fetch("/api/v1/auth/password/change", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          currentPassword: currentPwd,
+          newPassword: newPwd,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) {
+        toast.error(data.error || "خطا در تغییر رمز عبور");
+        return;
+      }
+      toast.success("رمز عبور شما با موفقیت تغییر یافت.");
+      setChangePwdOpen(false);
+      setCurrentPwd("");
+      setNewPwd("");
+      setConfirmPwd("");
+    } catch {
+      toast.error("خطا در برقراری ارتباط با سرور.");
+    } finally {
+      setSavingPwd(false);
+    }
+  }
 
   // Load enrollments first
   useEffect(() => {
@@ -207,20 +264,31 @@ export function StudentDashboard() {
     );
   }
 
-  // Enrollment selector — compact, in actions area
-  const enrollmentSelect = (
-    <Select value={activeEnrollment} onValueChange={setActiveEnrollment}>
-      <SelectTrigger className="h-9 w-56 sm:w-72 text-xs">
-        <SelectValue placeholder="انتخاب سال تحصیلی..." />
-      </SelectTrigger>
-      <SelectContent>
-        {enrollments.map((e) => (
-          <SelectItem key={e.id} value={e.id}>
-            {e.studentName} — {e.schoolName} ({e.academicYear})
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
+  // Header actions: enrollment selector + change password button
+  const headerActions = (
+    <div className="flex items-center gap-2 flex-wrap">
+      <Select value={activeEnrollment} onValueChange={setActiveEnrollment}>
+        <SelectTrigger className="h-9 w-52 sm:w-64 text-xs">
+          <SelectValue placeholder="انتخاب سال تحصیلی..." />
+        </SelectTrigger>
+        <SelectContent>
+          {enrollments.map((e) => (
+            <SelectItem key={e.id} value={e.id}>
+              {e.studentName} — {e.schoolName} ({e.academicYear})
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={() => setChangePwdOpen(true)}
+        className="h-9 gap-1.5 text-xs text-navy border-navy/20 hover:bg-navy/5 cursor-pointer"
+      >
+        <KeyRound className="h-3.5 w-3.5 text-navy" />
+        تغییر رمز عبور
+      </Button>
+    </div>
   );
 
   return (
@@ -229,7 +297,7 @@ export function StudentDashboard() {
         title={activeEnrollmentInfo?.studentName ?? "پروفایل دانش‌آموز"}
         subtitle="مشاهده روند پیشرفت تحصیلی"
         icon={GraduationCap}
-        actions={enrollmentSelect}
+        actions={headerActions}
       />
 
       {/* Active enrollment info — compact badges */}
@@ -497,6 +565,102 @@ export function StudentDashboard() {
           </ScrollReveal>
         </div>
       )}
+
+      {/* Change Password Dialog */}
+      <Dialog open={changePwdOpen} onOpenChange={setChangePwdOpen}>
+        <DialogContent className="sm:max-w-md" dir="rtl">
+          <DialogHeader>
+            <DialogTitle className="text-navy flex items-center gap-2">
+              <KeyRound className="h-5 w-5 text-navy" />
+              تغییر رمز عبور
+            </DialogTitle>
+            <DialogDescription>
+              رمز عبور جدید خود را وارد نمایید. رمز عبور باید حداقل ۴ نویسه باشد.
+            </DialogDescription>
+          </DialogHeader>
+
+          <form onSubmit={handleChangePassword} className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="curr-pass" className="text-xs">
+                رمز عبور فعلی
+              </Label>
+              <Input
+                id="curr-pass"
+                type="password"
+                dir="ltr"
+                required
+                value={currentPwd}
+                onChange={(e) => setCurrentPwd(e.target.value)}
+                placeholder="رمز عبور فعلی (پیش‌فرض: ۱۲۳۴۵۶)"
+                className="text-left font-mono h-9"
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="new-pass" className="text-xs">
+                رمز عبور جدید
+              </Label>
+              <Input
+                id="new-pass"
+                type="password"
+                dir="ltr"
+                required
+                minLength={4}
+                value={newPwd}
+                onChange={(e) => setNewPwd(e.target.value)}
+                placeholder="حداقل ۴ نویسه"
+                className="text-left font-mono h-9"
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="conf-pass" className="text-xs">
+                تکرار رمز عبور جدید
+              </Label>
+              <Input
+                id="conf-pass"
+                type="password"
+                dir="ltr"
+                required
+                minLength={4}
+                value={confirmPwd}
+                onChange={(e) => setConfirmPwd(e.target.value)}
+                placeholder="تکرار رمز عبور جدید"
+                className="text-left font-mono h-9"
+              />
+            </div>
+
+            <DialogFooter className="gap-2 sm:gap-0 pt-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setChangePwdOpen(false)}
+                disabled={savingPwd}
+                className="text-xs cursor-pointer"
+              >
+                انصراف
+              </Button>
+              <Button
+                type="submit"
+                disabled={savingPwd || !currentPwd || !newPwd || !confirmPwd}
+                className="bg-navy hover:bg-navy-light text-xs gap-1.5 cursor-pointer"
+              >
+                {savingPwd ? (
+                  <>
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    در حال ذخیره...
+                  </>
+                ) : (
+                  <>
+                    <Lock className="h-3.5 w-3.5" />
+                    ذخیره رمز جدید
+                  </>
+                )}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

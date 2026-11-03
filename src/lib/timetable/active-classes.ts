@@ -83,6 +83,7 @@ export async function resolveActiveClasses(
 
   const active: ActiveClassRow[] = [];
   for (const slot of slots) {
+    if (!slot.classRoom) continue;
     if (!weekTypeMatches(slot.weekType, parityResult, slot.specificDate, tehran.dateKey)) {
       continue;
     }

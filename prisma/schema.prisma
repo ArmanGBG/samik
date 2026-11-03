@@ -121,6 +121,7 @@ model User {
   phoneNumber  String   @unique
   firstName    String
   lastName     String
+  passwordHash String?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
@@ -274,6 +275,7 @@ model TimetableSlot {
   dayOfWeek      Int
   weekType       WeekType @default(ALL_WEEKS)
   specificDate   DateTime?
+  mergedGroupId  String?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
@@ -287,6 +289,7 @@ model TimetableSlot {
   // Composite Index — Developer Directive end of Section 9
   @@index([teacherUserId, dayOfWeek, weekType])
   @@index([schoolId, classRoomId])
+  @@index([mergedGroupId])
 }
 
 // ============================================================

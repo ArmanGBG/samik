@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { withTenantContext } from "@/lib/middleware-helpers/tenant-guard";
 import { db } from "@/lib/db";
+import { hashPassword, DEFAULT_INITIAL_PASSWORD } from "@/lib/auth/password";
 
 const CreateBody = z.object({
   firstName: z.string().min(1, "نام الزامی است."),
@@ -20,6 +21,7 @@ const CreateBody = z.object({
   guardianPhone1: z.string().regex(/^09\d{9}$/, "شماره ولی الزامی است."),
   guardianPhone2: z.string().regex(/^09\d{9}$/).optional().or(z.literal("")),
   academicYear: z.string().default("1404-1405"),
+  password: z.string().min(4).optional().or(z.literal("")),
 });
 
 /**
@@ -29,10 +31,13 @@ const CreateBody = z.object({
  * filter by that classroom. Returns ACTIVE enrollments only by default.
  */
 export async function GET(req: NextRequest) {
-  return withTenantContext(req, ["PRINCIPAL", "DEPUTY"], async () => {
+  return withTenantContext(req, ["PRINCIPAL", "DEPUTY"], async (ctx) => {
     try {
       const classroomId = req.nextUrl.searchParams.get("classroomId");
-      const where: Record<string, unknown> = { status: { in: ["ACTIVE", "PENDING_CONFIRMATION"] } };
+      const where: Record<string, unknown> = {
+        schoolId: ctx.schoolId,
+        status: { in: ["ACTIVE", "PENDING_CONFIRMATION"] },
+      };
       if (classroomId) where.classRoomId = classroomId;
 
       const enrollments = await db.schoolEnrollment.findMany({
@@ -133,13 +138,15 @@ export async function POST(req: NextRequest) {
             throw new Error("PHONE_CONFLICT");
           }
 
-          // Create new user
+          // Create new user with hashed password (default 123456)
+          const initPassword = body.password?.trim() || DEFAULT_INITIAL_PASSWORD;
           user = await tx.user.create({
             data: {
               nationalCode: finalNationalCode,
               phoneNumber: body.phoneNumber,
               firstName: body.firstName,
               lastName: body.lastName,
+              passwordHash: hashPassword(initPassword),
             },
           });
           isNewUser = true;
@@ -166,22 +173,30 @@ export async function POST(req: NextRequest) {
           }
         }
 
-        // Step 2: Check if already enrolled in THIS school + classroom
-        const existingWhere: any = {
-          schoolId: ctx.schoolId,
-          studentUserId: user.id,
-          academicYear: body.academicYear,
-        };
-        if (classId) {
-          existingWhere.classRoomId = classId;
-        }
-
+        // Step 2: Check if already enrolled in THIS school for THIS academic year
         const existingEnrollment = await tx.schoolEnrollment.findFirst({
-          where: existingWhere,
-          select: { id: true, status: true },
+          where: {
+            schoolId: ctx.schoolId,
+            studentUserId: user.id,
+            academicYear: body.academicYear,
+          },
+          select: { id: true, status: true, classRoomId: true },
         });
 
         if (existingEnrollment) {
+          // If already in this school for this academic year:
+          if (classId && existingEnrollment.classRoomId !== classId) {
+            // Update classroom and guardian phone
+            const updated = await tx.schoolEnrollment.update({
+              where: { id: existingEnrollment.id },
+              data: {
+                classRoom: { connect: { id: classId } },
+                guardianPhone1: body.guardianPhone1,
+                guardianPhone2: body.guardianPhone2 || null,
+              },
+            });
+            return { enrollment: updated, user, isNewUser: false, classroom, isUpdated: true };
+          }
           throw new Error("ALREADY_ENROLLED");
         }
 
@@ -212,10 +227,14 @@ export async function POST(req: NextRequest) {
           data,
         });
 
-        return { enrollment, user, isNewUser, classroom };
+        return { enrollment, user, isNewUser, classroom, isUpdated: false };
       });
 
-      const statusLabel = result.isNewUser ? "فعال" : "در انتظار تأیید ولی";
+      const statusLabel = result.isUpdated
+        ? "ویرایش و اختصاص کلاس"
+        : result.isNewUser
+        ? "فعال"
+        : "در انتظار تأیید ولی";
 
       return NextResponse.json(
         {
@@ -281,6 +300,7 @@ const PatchStudentBody = z.object({
     .optional()
     .or(z.literal("")),
   phoneNumber: z.string().regex(/^09\d{9}$/, "شماره موبایل نامعتبر است.").optional(),
+  password: z.string().min(4, "رمز عبور باید حداقل ۴ نویسه باشد.").optional().or(z.literal("")),
   classRoomId: z.string().uuid("کلاس انتخاب‌شده نامعتبر است.").optional().or(z.literal("")).nullable(),
   guardianPhone1: z.string().regex(/^09\d{9}$/, "شماره ولی الزامی است.").optional(),
   guardianPhone2: z.string().regex(/^09\d{9}$/).optional().or(z.literal("")).nullable(),
@@ -369,6 +389,9 @@ export async function PATCH(req: NextRequest) {
         if (body.lastName) userUpdate.lastName = body.lastName;
         if (patchNc) userUpdate.nationalCode = patchNc;
         if (body.phoneNumber) userUpdate.phoneNumber = body.phoneNumber;
+        if (body.password && body.password.trim().length >= 4) {
+          userUpdate.passwordHash = hashPassword(body.password.trim());
+        }
 
         if (Object.keys(userUpdate).length > 0) {
           await tx.user.update({
@@ -444,7 +467,7 @@ export async function PATCH(req: NextRequest) {
  * Remove a student enrollment from this school.
  */
 export async function DELETE(req: NextRequest) {
-  return withTenantContext(req, ["PRINCIPAL", "DEPUTY"], async () => {
+  return withTenantContext(req, ["PRINCIPAL", "DEPUTY"], async (ctx) => {
     const id = req.nextUrl.searchParams.get("id");
     if (!id) {
       return NextResponse.json({ ok: false, error: "شناسه ثبت‌نام (id) الزامی است." }, { status: 400 });
@@ -455,8 +478,8 @@ export async function DELETE(req: NextRequest) {
         where: { id },
         select: { id: true, studentUserId: true, schoolId: true },
       });
-      if (!enrollment) {
-        return NextResponse.json({ ok: false, error: "پرونده ثبت‌نام دانش‌آموز یافت نشد." }, { status: 404 });
+      if (!enrollment || enrollment.schoolId !== ctx.schoolId) {
+        return NextResponse.json({ ok: false, error: "پرونده ثبت‌نام دانش‌آموز در این مدرسه یافت نشد." }, { status: 404 });
       }
 
       await db.schoolEnrollment.delete({

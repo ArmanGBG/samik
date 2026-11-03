@@ -28,6 +28,9 @@ const PUBLIC_PATHS = new Set([
   "/verify",
   "/api/v1/auth/otp",
   "/api/v1/auth/verify",
+  "/api/v1/auth/login-password",
+  "/api/v1/auth/password/forgot-request",
+  "/api/v1/auth/password/forgot-reset",
 ]);
 
 const ROOT_ONLY_PATHS = new Set(["/select-profile"]);
@@ -46,7 +49,7 @@ const ROLE_PATH_MAP: Array<{ prefix: string; roles: string[] }> = [
 export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
-  // Allow public paths (login, OTP issue/verify)
+  // Allow public paths (login, OTP issue/verify, password login, forgot password)
   if (PUBLIC_PATHS.has(pathname)) return NextResponse.next();
 
   // Static assets / Next internals
@@ -73,16 +76,20 @@ export async function proxy(req: NextRequest) {
   }
 
   // Root token: only allow /select-profile, /logout, /me, /api/v1/auth/select-profile,
-  // /api/v1/auth/logout, /api/v1/me. Block direct access to dashboards until a
-  // contextual profile is chosen.
+  // /api/v1/auth/logout, /api/v1/me, /api/v1/auth/password/change.
   if (payload.kind === "root") {
     const allowed = new Set([
       "/select-profile",
       "/api/v1/me",
       "/api/v1/auth/select-profile",
       "/api/v1/auth/logout",
+      "/api/v1/auth/password/change",
     ]);
-    if (allowed.has(pathname)) return NextResponse.next();
+    if (allowed.has(pathname)) {
+      const requestHeaders = new Headers(req.headers);
+      requestHeaders.set("x-samik-user-id", payload.userId);
+      return NextResponse.next({ request: { headers: requestHeaders } });
+    }
     // Root token + has multiple profiles → force to /select-profile
     // Root token + has zero/one profile → also go to /select-profile (it self-routes)
     if (pathname.startsWith("/api/")) {

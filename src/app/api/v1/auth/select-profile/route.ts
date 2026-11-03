@@ -59,6 +59,12 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  // Inherit remaining TTL from root token (preserves 30-day "rememberMe" session)
+  const nowUnix = Math.floor(Date.now() / 1000);
+  const remainingSeconds = tokenPayload.exp && tokenPayload.exp > nowUnix
+    ? (tokenPayload.exp - nowUnix)
+    : 60 * 60;
+
   // For SUPER_ADMIN, the contextual token has no schoolId (global scope).
   // The `withSuperAdmin()` helper in tenant-guard.ts handles SUPER_ADMIN
   // routes by running with bypassTenantFilter=true.
@@ -67,6 +73,7 @@ export async function POST(req: NextRequest) {
     schoolId: body.role === "SUPER_ADMIN" ? "__global__" : body.schoolId,
     role: body.role,
     studentEnrollmentId: body.studentEnrollmentId,
+    expiresInSeconds: remainingSeconds,
   });
 
   const res = NextResponse.json({
@@ -83,7 +90,7 @@ export async function POST(req: NextRequest) {
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",
     path: "/",
-    maxAge: 60 * 60,
+    maxAge: remainingSeconds,
   });
   return res;
 }

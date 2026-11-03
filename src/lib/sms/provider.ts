@@ -124,7 +124,7 @@ export function getSmsProvider(): SmsProvider {
           ? "https://edge.ippanel.com/v1/api/send"
           : "https://api.payamak-panel.com/post/Send.asmx/SendByBaseNumber2"),
       senderNumber: process.env.ARTA_SENDER_NUMBER ?? "+983000505",
-      otpPatternCode: process.env.ARTA_OTP_PATTERN_CODE ?? "",
+      otpPatternCode: process.env.ARTA_OTP_PATTERN_CODE ?? "m316akrctl3xjvc",
       absencePatternCode: process.env.ARTA_ABSENCE_PATTERN_CODE ?? "na8zey3ygzfejiz",
     });
     console.log(

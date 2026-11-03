@@ -75,7 +75,7 @@ export async function GET(req: NextRequest) {
         id: e.id,
         schoolId: e.schoolId,
         schoolName: e.school.name,
-        classRoomName: `${e.classRoom.gradeLevel} ${e.classRoom.name}`,
+        classRoomName: e.classRoom ? `${e.classRoom.gradeLevel} ${e.classRoom.name}` : "بدون کلاس",
         academicYear: e.academicYear,
         status: e.status,
         studentId: e.student.id,

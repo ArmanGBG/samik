@@ -38,6 +38,11 @@ export interface ConflictCheckInput {
   startTime: string;          // "HH:mm"
   endTime: string;            // "HH:mm"
   /**
+   * If provided, slots with this same mergedGroupId are considered part of the
+   * same merged/combined class session and will NOT trigger a conflict error.
+   */
+  mergedGroupId?: string | null;
+  /**
    * If provided, this slot ID is excluded from the conflict check
    * (used when EDITING an existing slot — it shouldn't conflict with itself).
    */
@@ -121,6 +126,11 @@ export async function detectTeacherConflict(
     const conflicts: ConflictFinding[] = [];
 
     for (const slot of candidates) {
+      // If both slots share the same non-empty mergedGroupId, they are legitimately merged
+      if (input.mergedGroupId && slot.mergedGroupId && input.mergedGroupId === slot.mergedGroupId) {
+        continue;
+      }
+
       // Week-type must overlap (ALL_WEEKS is universal)
       // Check week types overlap
       if (!weekTypesOverlap(input.weekType as any, slot.weekType as any)) continue;

@@ -71,6 +71,7 @@ interface Slot {
   dayOfWeek: number;
   weekType: "ALL_WEEKS" | "ODD_WEEKS" | "EVEN_WEEKS" | "SINGLE_SESSION";
   specificDate?: string | null;
+  mergedGroupId?: string | null;
 }
 
 const WEEK_TYPES = [
@@ -119,6 +120,7 @@ export function TimetableBuilder({
     dayOfWeek: 0,
     weekType: "ALL_WEEKS" as "ALL_WEEKS" | "ODD_WEEKS" | "EVEN_WEEKS" | "SINGLE_SESSION",
     specificDate: "",
+    mergedGroupId: "",
   });
 
   // Edit slot state
@@ -131,6 +133,7 @@ export function TimetableBuilder({
     dayOfWeek: 0,
     weekType: "ALL_WEEKS" as "ALL_WEEKS" | "ODD_WEEKS" | "EVEN_WEEKS" | "SINGLE_SESSION",
     specificDate: "",
+    mergedGroupId: "",
   });
 
   // Filter state — classroom vs teacher view
@@ -248,6 +251,7 @@ export function TimetableBuilder({
         dayOfWeek: 0,
         weekType: "ALL_WEEKS",
         specificDate: "",
+        mergedGroupId: "",
       });
       loadAll();
     } catch {
@@ -283,6 +287,7 @@ export function TimetableBuilder({
       dayOfWeek: slot.dayOfWeek,
       weekType: slot.weekType,
       specificDate: slot.specificDate ? zonedDateKeyFor(new Date(slot.specificDate)) : "",
+      mergedGroupId: slot.mergedGroupId || "",
     });
   }
 
@@ -535,6 +540,18 @@ export function TimetableBuilder({
                       />
                     </div>
                   )}
+                  <div className="space-y-1.5 pt-1">
+                    <Label className="text-xs font-medium text-muted-foreground flex items-center justify-between">
+                      <span>شناسه کلاس ادغامی (اختیاری)</span>
+                      <span className="text-[10px] text-muted-foreground/70">جهت برگزاری مشترک با کلاس دیگر</span>
+                    </Label>
+                    <Input
+                      placeholder="مثلاً: math-101-102 یا کلید دلخواه"
+                      value={form.mergedGroupId}
+                      onChange={(e) => setForm({ ...form, mergedGroupId: e.target.value })}
+                      className="h-8 text-xs font-mono"
+                    />
+                  </div>
                 </div>
                 <DialogFooter className="gap-2">
                   <Button
@@ -758,6 +775,7 @@ export function TimetableBuilder({
                                       dayOfWeek: d.value,
                                       weekType: "ALL_WEEKS",
                                       specificDate: "",
+                                      mergedGroupId: "",
                                     });
                                     setDialogOpen(true);
                                   }}
@@ -824,9 +842,16 @@ export function TimetableBuilder({
                                         </>
                                       )}
                                     </div>
-                                    <Badge variant="outline" className="text-[10px] px-1 py-0 h-4 font-medium">
-                                      {s.weekType === "SINGLE_SESSION" && s.specificDate ? new Date(s.specificDate).toLocaleDateString('fa-IR', { month: 'short', day: 'numeric', timeZone: TEHRAN_TIME_ZONE }) : WEEK_TYPES.find((w) => w.value === s.weekType)?.short}
-                                    </Badge>
+                                    <div className="flex items-center gap-1 flex-wrap">
+                                      <Badge variant="outline" className="text-[10px] px-1 py-0 h-4 font-medium">
+                                        {s.weekType === "SINGLE_SESSION" && s.specificDate ? new Date(s.specificDate).toLocaleDateString('fa-IR', { month: 'short', day: 'numeric', timeZone: TEHRAN_TIME_ZONE }) : WEEK_TYPES.find((w) => w.value === s.weekType)?.short}
+                                      </Badge>
+                                      {s.mergedGroupId && (
+                                        <Badge variant="secondary" className="text-[9px] px-1 py-0 h-4 font-normal bg-purple-50 text-purple-700 border-purple-200">
+                                          ادغامی
+                                        </Badge>
+                                      )}
+                                    </div>
                                   </div>
                                 ))
                               )}
@@ -980,6 +1005,18 @@ export function TimetableBuilder({
                     ))}
                   </SelectContent>
                 </Select>
+              </div>
+              <div className="space-y-1.5 pt-1">
+                <Label className="text-xs font-medium text-muted-foreground flex items-center justify-between">
+                  <span>شناسه کلاس ادغامی (اختیاری)</span>
+                  <span className="text-[10px] text-muted-foreground/70">جهت برگزاری مشترک با کلاس دیگر</span>
+                </Label>
+                <Input
+                  placeholder="شناسه ادغام (خالی برای کلاس مستقل)"
+                  value={editForm.mergedGroupId}
+                  onChange={(e) => setEditForm({ ...editForm, mergedGroupId: e.target.value })}
+                  className="h-8 text-xs font-mono"
+                />
               </div>
             </div>
             <DialogFooter className="mt-4 gap-2 flex-row-reverse justify-start">

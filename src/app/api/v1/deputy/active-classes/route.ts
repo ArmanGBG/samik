@@ -64,13 +64,22 @@ export async function GET(req: NextRequest) {
       const initialAbsentees = [];
       for (const session of todaysSessions) {
         for (const record of session.attendanceRecords) {
+          const slot = session.timetableSlot;
+          const classroomName = slot?.classRoom
+            ? `پایه ${slot.classRoom.gradeLevel} - ${slot.classRoom.name}`
+            : "کلاس حذف‌شده";
+          const subjectTitle = slot?.subject?.title ?? "درس نامشخص";
+          const teacherName = slot?.teacher
+            ? `${slot.teacher.firstName} ${slot.teacher.lastName}`
+            : "معلم نامشخص";
+
           initialAbsentees.push({
             id: `${session.id}-${record.studentUserId}`,
             studentId: record.studentUserId,
             studentName: `${record.student.firstName} ${record.student.lastName}`,
-            classroomName: `پایه ${session.timetableSlot.classRoom.gradeLevel} - ${session.timetableSlot.classRoom.name}`,
-            subjectTitle: session.timetableSlot.subject.title,
-            teacherName: `${session.timetableSlot.teacher.firstName} ${session.timetableSlot.teacher.lastName}`,
+            classroomName,
+            subjectTitle,
+            teacherName,
             submittedAt: session.createdAt.toISOString(),
             status: "ABSENT",
             guardianPhone: record.student.studentEnrollments?.[0]?.guardianPhone1 ?? null,

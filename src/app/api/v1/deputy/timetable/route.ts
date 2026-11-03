@@ -24,6 +24,7 @@ const CreateBody = z.object({
   dayOfWeek: z.number().int().min(0).max(6),
   weekType: z.enum(["ALL_WEEKS", "ODD_WEEKS", "EVEN_WEEKS", "SINGLE_SESSION"]).default("ALL_WEEKS"),
   specificDate: z.string().optional().nullable(),
+  mergedGroupId: z.string().optional().nullable(),
 });
 
 /**
@@ -162,17 +163,23 @@ export async function POST(req: NextRequest) {
       specificDate: body.specificDate ? normalizeSpecificDate(body.specificDate) : null,
       startTime: bell.startTime,
       endTime: bell.endTime,
+      mergedGroupId: body.mergedGroupId,
     });
 
     if (conflicts.length > 0) {
-      // Per Section 5 — return only the first conflict's school NAME to
-      // inform the deputy, without leaking other tenant data.
+      // Per Section 5 — return accurate conflict details
       const c = conflicts[0];
+      const isSameSchool = c.schoolId === ctx.schoolId;
+      const errorMsg = isSameSchool
+        ? `این دبیر در همین ساعت در کلاس «${c.classroomName}» (${c.subjectTitle}) همین مدرسه برنامه دارد.`
+        : `این دبیر در این ساعت در مدرسه دیگری (${c.schoolName}) کلاس دارد.`;
+
       return NextResponse.json(
         {
           ok: false,
-          error: `این دبیر در این ساعت در مدرسه دیگری کلاس دارد.`,
+          error: errorMsg,
           conflict: {
+            isSameSchool,
             schoolName: c.schoolName,
             dayOfWeek: c.dayOfWeek,
             startTime: c.startTime,
@@ -239,6 +246,7 @@ const PatchBody = z.object({
   dayOfWeek: z.number().int().min(0).max(6).optional(),
   weekType: z.enum(["ALL_WEEKS", "ODD_WEEKS", "EVEN_WEEKS", "SINGLE_SESSION"]).optional(),
   specificDate: z.string().optional().nullable(),
+  mergedGroupId: z.string().optional().nullable(),
 });
 
 export async function PATCH(req: NextRequest) {
@@ -308,6 +316,8 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ ok: false, error: "زنگ انتخاب‌شده یافت نشد." }, { status: 404 });
     }
 
+    const finalMergedGroupId = body.mergedGroupId !== undefined ? body.mergedGroupId : existing.mergedGroupId;
+
     // Global conflict detection (skip current slot)
     const conflicts = await detectTeacherConflict({
       teacherUserId: finalTeacherId,
@@ -316,16 +326,23 @@ export async function PATCH(req: NextRequest) {
       specificDate: finalSpecificDate,
       startTime: bell.startTime,
       endTime: bell.endTime,
+      mergedGroupId: finalMergedGroupId,
       excludeSlotId: id,
     });
 
     if (conflicts.length > 0) {
       const c = conflicts[0];
+      const isSameSchool = c.schoolId === ctx.schoolId;
+      const errorMsg = isSameSchool
+        ? `این دبیر در همین ساعت در کلاس «${c.classroomName}» (${c.subjectTitle}) همین مدرسه برنامه دارد.`
+        : `این دبیر در این ساعت در مدرسه دیگری (${c.schoolName}) کلاس دارد.`;
+
       return NextResponse.json(
         {
           ok: false,
-          error: `این دبیر در این ساعت در مدرسه دیگری کلاس دارد.`,
+          error: errorMsg,
           conflict: {
+            isSameSchool,
             schoolName: c.schoolName,
             classroomName: c.classroomName,
             subjectTitle: c.subjectTitle,

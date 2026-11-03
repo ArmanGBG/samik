@@ -116,7 +116,7 @@ export async function POST(req: NextRequest) {
       pointId: point.id,
       studentId: enrollment.student.id,
       studentName: `${enrollment.student.firstName} ${enrollment.student.lastName}`,
-      classroomName: `${enrollment.classRoom.gradeLevel} ${enrollment.classRoom.name}`,
+      classroomName: enrollment.classRoom ? `${enrollment.classRoom.gradeLevel} ${enrollment.classRoom.name}` : "بدون کلاس",
       pointType: body.pointType,
       reasonTag: body.reasonTag ?? null,
       teacherName: "", // could be enriched from ctx if needed

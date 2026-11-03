@@ -54,14 +54,16 @@ export async function signRootToken(payload: {
   userId: string;
   phone: string;
   roles: Record<string, string[]>;
+  expiresInSeconds?: number;
 }): Promise<string> {
+  const ttl = payload.expiresInSeconds ?? ACCESS_TOKEN_TTL_SECONDS;
   return new SignJWT({ ...payload, kind: "root" as const })
     .setProtectedHeader({ alg: "HS256", typ: "JWT" })
     .setIssuedAt()
     .setIssuer(ISSUER)
     .setAudience(AUDIENCE)
     .setSubject(payload.userId)
-    .setExpirationTime(`${ACCESS_TOKEN_TTL_SECONDS}s`)
+    .setExpirationTime(`${ttl}s`)
     .sign(SECRET);
 }
 
@@ -70,14 +72,16 @@ export async function signContextualToken(payload: {
   schoolId: string;
   role: string;
   studentEnrollmentId?: string;
+  expiresInSeconds?: number;
 }): Promise<string> {
+  const ttl = payload.expiresInSeconds ?? ACCESS_TOKEN_TTL_SECONDS;
   return new SignJWT({ ...payload, kind: "contextual" as const })
     .setProtectedHeader({ alg: "HS256", typ: "JWT" })
     .setIssuedAt()
     .setIssuer(ISSUER)
     .setAudience(AUDIENCE)
     .setSubject(payload.userId)
-    .setExpirationTime(`${ACCESS_TOKEN_TTL_SECONDS}s`)
+    .setExpirationTime(`${ttl}s`)
     .sign(SECRET);
 }
 

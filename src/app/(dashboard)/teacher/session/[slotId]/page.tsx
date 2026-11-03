@@ -22,7 +22,8 @@ import {
   Star,
   CalendarDays,
   History,
-  BookOpen
+  BookOpen,
+  AlertCircle
 } from "lucide-react";
 import { AttendanceToggle, type AttendanceState } from "@/components/teacher/attendance-toggle";
 import { QuickPointButtons } from "@/components/teacher/quick-point-buttons";
@@ -52,6 +53,9 @@ interface SlotInfo {
   subjectId: string;
   classroomName: string;
   classRoomId: string;
+  isMerged?: boolean;
+  mergedClassroomIds?: string[];
+  mergedSlotIds?: string[];
   bellTitle: string;
   startTime: string;
   endTime: string;
@@ -66,6 +70,8 @@ interface Student {
   firstName: string;
   lastName: string;
   fullName: string;
+  classroomName?: string;
+  classRoomId?: string;
   attendanceState: AttendanceState;
   totalPoints: number;
   historicalGrades: HistoricalGrade[];
@@ -398,6 +404,18 @@ export default function UnifiedSessionPage() {
         </div>
       </div>
 
+      {students.length === 0 && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-amber-900 flex items-start gap-3">
+          <AlertCircle className="h-5 w-5 text-amber-600 mt-0.5 shrink-0" />
+          <div className="space-y-1">
+            <h4 className="font-bold text-sm">این کلاس در حال حاضر دانش‌آموز فعالی ندارد</h4>
+            <p className="text-xs text-amber-800 leading-relaxed">
+              ممکن است سال تحصیلی به پایان رسیده و پرونده‌های تحصیلی بایگانی شده باشند، یا هنوز دانش‌آموزی در این کلاس ثبت‌نام نشده باشد. تا زمان ثبت‌نام دانش‌آموزان امکان ثبت حضور و غیاب وجود ندارد.
+            </p>
+          </div>
+        </div>
+      )}
+
       <ScrollReveal delay={30}>
         <div className="relative">
           <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -437,7 +455,9 @@ export default function UnifiedSessionPage() {
                   {filteredStudents.length === 0 ? (
                     <tr>
                       <td colSpan={5 + recentAssessments.length} className="py-12 text-center text-muted-foreground">
-                        دانش‌آموزی یافت نشد.
+                        {students.length === 0
+                          ? "این کلاس در سال تحصیلی جاری دانش‌آموز فعالی ندارد یا سال تحصیلی به پایان رسیده و پرونده‌ها بایگانی شده‌اند."
+                          : "دانش‌آموزی با این مشخصات یافت نشد."}
                       </td>
                     </tr>
                   ) : (
@@ -464,6 +484,11 @@ export default function UnifiedSessionPage() {
                                 {idx + 1}
                               </span>
                               <span className="font-bold text-sm text-navy">{student.fullName}</span>
+                              {slot?.isMerged && student.classroomName && (
+                                <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-5 bg-sky-50 text-sky-700 border-sky-200">
+                                  {student.classroomName}
+                                </Badge>
+                              )}
                               <Badge variant="secondary" className="mr-auto h-5 text-[10px] gap-1 px-1.5 bg-indigo-50 text-indigo-700 border-indigo-200">
                                 <Star className="h-3 w-3" />
                                 {student.totalPoints.toLocaleString("fa-IR")}
@@ -576,7 +601,7 @@ export default function UnifiedSessionPage() {
           </div>
           <Button
             onClick={handleCommitAttendance}
-            disabled={submitting}
+            disabled={submitting || students.length === 0}
             size="lg"
             className="w-full sm:w-auto bg-emerald hover:bg-emerald-dark h-11 px-8 text-sm font-bold gap-2 shadow-lg shadow-emerald/20 cursor-pointer"
           >

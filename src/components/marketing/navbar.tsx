@@ -15,8 +15,10 @@ interface NavbarProps {
 
 const NAV_LINKS = [
   { href: "#features", label: "امکانات" },
-  { href: "#roles", label: "نقش‌ها" },
-  { href: "#contact", label: "تماس" },
+  { href: "#comparison", label: "مقایسه" },
+  { href: "#roles", label: "بخش‌های سامانه" },
+  { href: "#faq", label: "سوالات متداول" },
+  { href: "#contact", label: "تماس با ما" },
 ];
 
 export function Navbar({ initialIsAuthenticated }: NavbarProps) {
@@ -54,7 +56,7 @@ export function Navbar({ initialIsAuthenticated }: NavbarProps) {
       className={cn(
         "fixed top-0 inset-x-0 z-50 transition-all duration-300",
         scrolled
-          ? "bg-white/85 backdrop-blur-md shadow-sm border-b border-border/60"
+          ? "bg-white/90 backdrop-blur-md shadow-sm border-b border-border/60"
           : "bg-transparent"
       )}
     >
@@ -66,18 +68,18 @@ export function Navbar({ initialIsAuthenticated }: NavbarProps) {
             <div className="flex flex-col">
               <span className="text-lg font-bold text-navy leading-none">سامیک</span>
               <span className="text-[10px] text-muted-foreground leading-none mt-0.5 hidden sm:block">
-                سامانه مدیریت یکپارچه کلاس
+                سامانه هوشمند مدیریت کلاس و مدرسه
               </span>
             </div>
           </Link>
 
           {/* Desktop nav */}
-          <nav className="hidden md:flex items-center gap-8">
+          <nav className="hidden md:flex items-center gap-7">
             {NAV_LINKS.map((link) => (
               <a
                 key={link.href}
                 href={link.href}
-                className="text-sm font-medium text-foreground/70 hover:text-navy transition-colors"
+                className="text-sm font-medium text-foreground/75 hover:text-navy transition-colors"
               >
                 {link.label}
               </a>
@@ -87,27 +89,27 @@ export function Navbar({ initialIsAuthenticated }: NavbarProps) {
           {/* CTA */}
           <div className="hidden md:flex items-center gap-3">
             <Button
-              variant="ghost"
+              variant="outline"
               size="sm"
               asChild
-              className="text-foreground/70 hover:text-navy cursor-pointer"
+              className="text-xs font-medium border-border/80 hover:border-navy hover:text-navy cursor-pointer"
             >
-              <a href="#contact">درخواست دمو</a>
+              <a href="#contact">درخواست دمو رایگان</a>
             </Button>
             <Button
               size="sm"
               onClick={handlePrimaryCta}
               className={cn(
-                "gap-2 cursor-pointer font-medium",
+                "gap-2 cursor-pointer font-medium text-xs",
                 isAuthed
-                  ? "bg-emerald hover:bg-emerald-dark"
-                  : "bg-navy hover:bg-navy-dark"
+                  ? "bg-emerald hover:bg-emerald-dark text-white"
+                  : "bg-navy hover:bg-navy-dark text-white"
               )}
             >
               {isAuthed ? (
                 <>
                   <LayoutDashboard className="h-4 w-4" />
-                  ورود به داشبورد من
+                  ورود به پنل من
                 </>
               ) : (
                 <>
@@ -144,9 +146,9 @@ export function Navbar({ initialIsAuthenticated }: NavbarProps) {
               </a>
             ))}
             <div className="border-t border-border mt-2 pt-3 flex flex-col gap-2">
-              <Button variant="outline" asChild className="w-full cursor-pointer">
+              <Button variant="outline" asChild className="w-full cursor-pointer text-xs">
                 <a href="#contact" onClick={() => setMobileOpen(false)}>
-                  درخواست دمو و مشاوره
+                  درخواست دمو رایگان
                 </a>
               </Button>
               <Button
@@ -155,16 +157,16 @@ export function Navbar({ initialIsAuthenticated }: NavbarProps) {
                   handlePrimaryCta();
                 }}
                 className={cn(
-                  "w-full gap-2 cursor-pointer font-medium",
+                  "w-full gap-2 cursor-pointer font-medium text-xs",
                   isAuthed
-                    ? "bg-emerald hover:bg-emerald-dark"
-                    : "bg-navy hover:bg-navy-dark"
+                    ? "bg-emerald hover:bg-emerald-dark text-white"
+                    : "bg-navy hover:bg-navy-dark text-white"
                 )}
               >
                 {isAuthed ? (
                   <>
                     <LayoutDashboard className="h-4 w-4" />
-                    ورود به داشبورد من
+                    ورود به پنل من
                   </>
                 ) : (
                   <>

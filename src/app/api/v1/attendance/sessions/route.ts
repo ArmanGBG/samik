@@ -113,10 +113,25 @@ export async function POST(req: NextRequest) {
         };
       }
 
-      // Get all active students in this classroom
+      // Find merged peer slots if slot belongs to a merged group
+      const targetSlots = slot.mergedGroupId
+        ? await db.timetableSlot.findMany({
+            where: {
+              mergedGroupId: slot.mergedGroupId,
+              schoolId: ctx.schoolId,
+            },
+            include: {
+              classRoom: { select: { id: true, name: true, gradeLevel: true } },
+            },
+          })
+        : [slot];
+
+      const targetClassroomIds = targetSlots.map((s) => s.classRoomId);
+
+      // Get all active students in the target classroom(s)
       const enrollments = await db.schoolEnrollment.findMany({
         where: {
-          classRoomId: slot.classRoomId,
+          classRoomId: { in: targetClassroomIds },
           status: "ACTIVE",
         },
         include: {
@@ -128,9 +143,8 @@ export async function POST(req: NextRequest) {
 
       // Build the attendance records: default PRESENT, override with provided arrays
       const absenteeSet = new Set(body.absentees);
-      
 
-      // Validate all student IDs are actually enrolled in this classroom
+      // Validate all student IDs are actually enrolled in this classroom / merged classrooms
       const enrolledIds = new Set(enrollments.map((e) => e.student.id));
       const invalidIds = [
         ...body.absentees,
@@ -154,6 +168,7 @@ export async function POST(req: NextRequest) {
         if (absenteeSet.has(sid)) status = "ABSENT";
         return {
           studentUserId: sid,
+          classRoomId: e.classRoomId,
           status,
           studentName: `${e.student.firstName} ${e.student.lastName}`,
           // For NotificationOutbox draft generation:
@@ -171,53 +186,56 @@ export async function POST(req: NextRequest) {
       const sessionDate = new Date(body.date + "T00:00:00Z");
 
       // === Atomic Transaction ===
-      // Per Section 6 — "عملیات دسته‌ای (Batch Insert) برای حضور غیاب":
-      //   > "اگر خطایی در ثبتِ یکی از رکوردها رخ داد، کل عملیات Rollback
-      //   >  شود تا داده‌های ناقص ذخیره نشود."
-      //
-      // Per Section 8 — "تولید پیش‌نویس (Draft Generation)":
-      //   > "وقتی معلمی غیبت دانش‌آموزی را ثبت می‌کند، سیستم بلافاصله یک
-      //   >  رکورد در جدول NotificationOutbox با وضعیت DRAFT می‌سازد."
       const result = await db.$transaction(async (tx) => {
-        // Upsert the ClassSession — if it already exists (e.g. duplicate
-        // request slipping past idempotency), update it to SUBMITTED.
-        // The unique constraint on (timetableSlotId, date) enforces this.
-        const session = await tx.classSession.upsert({
-          where: {
-            timetableSlotId_date: {
-              timetableSlotId: body.timetableSlotId,
-              date: sessionDate,
+        // For each target slot (main slot or peers in merged group), upsert the ClassSession
+        // and insert the respective attendance records.
+        const createdSessions = [];
+
+        for (const tSlot of targetSlots) {
+          const session = await tx.classSession.upsert({
+            where: {
+              timetableSlotId_date: {
+                timetableSlotId: tSlot.id,
+                date: sessionDate,
+              },
             },
-          },
-          create: {
-            schoolId: ctx.schoolId,
-            timetableSlotId: body.timetableSlotId,
-            date: sessionDate,
-            status: "SUBMITTED",
-            submittedAt: new Date(),
-          },
-          update: {
-            status: "SUBMITTED",
-            submittedAt: new Date(),
-          },
-        });
+            create: {
+              schoolId: ctx.schoolId,
+              timetableSlotId: tSlot.id,
+              date: sessionDate,
+              status: "SUBMITTED",
+              submittedAt: new Date(),
+            },
+            update: {
+              status: "SUBMITTED",
+              submittedAt: new Date(),
+            },
+          });
+          createdSessions.push(session);
 
-        // Delete any existing attendance records for this session
-        // (handles the case of an update — e.g. teacher re-submitting
-        // after the deputy requested a correction).
-        await tx.attendanceRecord.deleteMany({
-          where: { classSessionId: session.id },
-        });
+          // Delete existing attendance records for this session
+          await tx.attendanceRecord.deleteMany({
+            where: { classSessionId: session.id },
+          });
 
-        // Bulk-create the new attendance records
-        await tx.attendanceRecord.createMany({
-          data: recordsToCreate.map((r) => ({
-            schoolId: ctx.schoolId,
-            classSessionId: session.id,
-            studentUserId: r.studentUserId,
-            status: r.status,
-          })),
-        });
+          // Filter records belonging to this slot's classroom
+          const slotRecords = recordsToCreate.filter(
+            (r) => r.classRoomId === tSlot.classRoomId
+          );
+
+          if (slotRecords.length > 0) {
+            await tx.attendanceRecord.createMany({
+              data: slotRecords.map((r) => ({
+                schoolId: ctx.schoolId,
+                classSessionId: session.id,
+                studentUserId: r.studentUserId,
+                status: r.status,
+              })),
+            });
+          }
+        }
+
+        const session = createdSessions[0];
 
         // === NotificationOutbox Draft Generation (Section 8 + Phase 5.1) ===
         // For each ABSENT student, create a DRAFT notification to their
@@ -234,21 +252,39 @@ export async function POST(req: NextRequest) {
           (r) => r.status === "ABSENT" && r.guardianPhone
         );
 
-        // Clean up old drafts for this session (in case of re-submission)
-        // We delete DRAFTs for ALL students in this class, not just the current absentees,
-        // so that if a student was previously absent but is now present, their old draft is removed!
-        await tx.notificationOutbox.deleteMany({
+        const todayFa = toPersianDate(new Date());
+
+        // Clean up old drafts for this specific session/subject only (in case of re-submission).
+        // Does NOT wipe out drafts from earlier bells or other subjects!
+        const candidateDrafts = await tx.notificationOutbox.findMany({
           where: {
             schoolId: ctx.schoolId,
             status: "DRAFT",
             eventType: "ABSENCE",
             studentUserId: { in: recordsToCreate.map((r) => r.studentUserId) },
           },
+          select: { id: true, metadataJson: true, messageBody: true },
         });
 
-        if (absenteesWithPhone.length > 0) {
-          const todayFa = toPersianDate(new Date());
+        const draftsToDelete = candidateDrafts.filter((d) => {
+          if (d.metadataJson) {
+            try {
+              const meta = JSON.parse(d.metadataJson);
+              if (meta.classSessionId && meta.classSessionId === session.id) return true;
+              if (meta.timetableSlotId && meta.timetableSlotId === slot.id) return true;
+              if (meta.subject === slot.subject.title && meta.date === todayFa) return true;
+            } catch {}
+          }
+          return d.messageBody.includes(slot.subject.title);
+        });
 
+        if (draftsToDelete.length > 0) {
+          await tx.notificationOutbox.deleteMany({
+            where: { id: { in: draftsToDelete.map((d) => d.id) } },
+          });
+        }
+
+        if (absenteesWithPhone.length > 0) {
           // Fetch school name for the metadata (needed by the pattern API).
           // This is a small query inside the transaction — acceptable cost.
           const schoolInfo = await tx.school.findUnique({
@@ -273,6 +309,8 @@ export async function POST(req: NextRequest) {
                   date: todayFa,
                   subject: slot.subject.title,
                   schoolName,
+                  timetableSlotId: slot.id,
+                  classSessionId: session.id,
                 }),
                 status: "DRAFT",
               };

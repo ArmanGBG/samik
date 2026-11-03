@@ -169,7 +169,7 @@ export async function GET(req: NextRequest) {
       enrollment: {
         id: enrollment.id,
         schoolName: enrollment.school.name,
-        classRoomName: `${enrollment.classRoom.gradeLevel} ${enrollment.classRoom.name}`,
+        classRoomName: enrollment.classRoom ? `${enrollment.classRoom.gradeLevel} ${enrollment.classRoom.name}` : "بدون کلاس",
         academicYear: enrollment.academicYear,
         status: enrollment.status,
         studentName: `${enrollment.student.firstName} ${enrollment.student.lastName}`,

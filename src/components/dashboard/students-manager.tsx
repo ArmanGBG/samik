@@ -36,6 +36,7 @@ import {
   ChevronsUpDown,
   UserCheck,
   Clock,
+  KeyRound,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toPersianDate } from "@/lib/date-utils";
@@ -105,10 +106,35 @@ export function StudentsManager() {
     lastName: "",
     nationalCode: "",
     phoneNumber: "",
+    password: "",
     classRoomId: "",
     guardianPhone1: "",
     guardianPhone2: "",
   });
+
+  const [resettingId, setResettingId] = useState<string | null>(null);
+
+  async function handleResetPassword(student: Student) {
+    if (!confirm(`آیا مطمئن هستید که می‌خواهید رمز عبور ${student.fullName} به «۱۲۳۴۵۶» بازنشانی شود؟`)) {
+      return;
+    }
+    setResettingId(student.enrollmentId);
+    try {
+      const res = await fetch(`/api/v1/principal/students/${student.enrollmentId}/reset-password`, {
+        method: "POST",
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) {
+        toast.error(data.error || "خطا در بازنشانی رمز عبور");
+        return;
+      }
+      toast.success(data.message || `رمز عبور ${student.fullName} به ۱۲۳۴۵۶ بازنشانی شد.`);
+    } catch {
+      toast.error("خطا در برقراری ارتباط با سرور.");
+    } finally {
+      setResettingId(null);
+    }
+  }
 
   async function load() {
     setLoading(true);
@@ -183,6 +209,7 @@ export function StudentsManager() {
           classRoomId: form.classRoomId === "none" ? "" : form.classRoomId,
           nationalCode: toAsciiDigitsOnly(form.nationalCode) || undefined,
           phoneNumber: toAsciiDigitsOnly(form.phoneNumber),
+          password: form.password?.trim() || undefined,
           guardianPhone1: toAsciiDigitsOnly(form.guardianPhone1),
           guardianPhone2: form.guardianPhone2
             ? toAsciiDigitsOnly(form.guardianPhone2)
@@ -205,6 +232,7 @@ export function StudentsManager() {
         lastName: "",
         nationalCode: "",
         phoneNumber: "",
+        password: "",
         classRoomId: "",
         guardianPhone1: "",
         guardianPhone2: "",
@@ -351,7 +379,7 @@ export function StudentsManager() {
                   </SelectContent>
                 </Select>
               </div>
-              {/* Row 3: Guardian Phone 2 (optional) + Submit */}
+              {/* Row 3: Guardian Phone 2 (optional) + Password (optional) + Submit */}
               <div className="space-y-1.5">
                 <Label htmlFor="s-g2" className="text-xs font-medium">
                   شماره ولی (۲) <span className="text-muted-foreground">(اختیاری)</span>
@@ -369,7 +397,22 @@ export function StudentsManager() {
                   maxLength={11}
                 />
               </div>
-              <div className="md:col-span-2 flex items-end justify-end">
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="s-pwd" className="text-xs font-medium">رمز عبور اولیه</Label>
+                  <span className="text-[10px] text-muted-foreground font-normal">(اختیاری — پیش‌فرض: ۱۲۳۴۵۶)</span>
+                </div>
+                <Input
+                  id="s-pwd"
+                  type="text"
+                  dir="ltr"
+                  className="text-left font-mono h-9"
+                  placeholder="۱۲۳۴۵۶"
+                  value={form.password}
+                  onChange={(e) => setForm({ ...form, password: e.target.value })}
+                />
+              </div>
+              <div className="flex items-end justify-end">
                 <Button
                   type="submit"
                   disabled={
@@ -379,7 +422,7 @@ export function StudentsManager() {
                     !form.phoneNumber ||
                     !form.guardianPhone1
                   }
-                  className="bg-emerald hover:bg-emerald-dark h-9 gap-2 cursor-pointer font-medium"
+                  className="bg-emerald hover:bg-emerald-dark h-9 gap-2 cursor-pointer font-medium w-full md:w-auto"
                 >
                   {submitting ? (
                     <>
@@ -389,7 +432,7 @@ export function StudentsManager() {
                   ) : (
                     <>
                       <Plus className="h-4 w-4" />
-                      ثبت‌نام و افزودن دانش‌آموز
+                      ثبت‌نام دانش‌آموز
                     </>
                   )}
                 </Button>
@@ -437,13 +480,14 @@ export function StudentsManager() {
             <div className="overflow-x-auto max-h-[28rem] overflow-y-auto sticky-table-header" dir="rtl">
               <Table className="table-fixed w-full" dir="rtl">
                 <colgroup>
-                  <col className="w-[20%]" />
-                  <col className="w-[15%]" />
-                  <col className="w-[15%]" />
-                  <col className="w-[15%]" />
-                  <col className="w-[12%]" />
+                  <col className="w-[18%]" />
                   <col className="w-[13%]" />
-                  <col className="w-[10%]" />
+                  <col className="w-[14%]" />
+                  <col className="w-[14%]" />
+                  <col className="w-[11%]" />
+                  <col className="w-[11%]" />
+                  <col className="w-[7%]" />
+                  <col className="w-[12%]" />
                 </colgroup>
                 <TableHeader>
                   <TableRow className="hover:bg-transparent">
@@ -454,6 +498,7 @@ export function StudentsManager() {
                     <SortableHead label="وضعیت" sortKey="status" currentKey={sortKey} dir={sortDir} onClick={() => toggleSort("status")} className="text-center" />
                     <SortableHead label="تاریخ ثبت" sortKey="createdAt" currentKey={sortKey} dir={sortDir} onClick={() => toggleSort("createdAt")} className="text-center" />
                     <TableHead className="text-center">سال</TableHead>
+                    <TableHead className="text-center">عملیات</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -495,6 +540,25 @@ export function StudentsManager() {
                         </TableCell>
                         <TableCell className="text-center text-xs text-muted-foreground tabular-nums">
                           {s.academicYear}
+                        </TableCell>
+                        <TableCell className="text-center">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleResetPassword(s)}
+                            disabled={resettingId === s.enrollmentId}
+                            title="بازنشانی رمز عبور به ۱۲۳۴۵۶"
+                            className="h-7 px-2 text-xs text-muted-foreground hover:text-amber-700 hover:bg-amber-50 dark:hover:bg-amber-950/30 cursor-pointer"
+                          >
+                            {resettingId === s.enrollmentId ? (
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            ) : (
+                              <span className="inline-flex items-center gap-1">
+                                <KeyRound className="h-3.5 w-3.5 text-amber-600" />
+                                <span className="text-[11px]">ریست رمز</span>
+                              </span>
+                            )}
+                          </Button>
                         </TableCell>
                       </TableRow>
                     );

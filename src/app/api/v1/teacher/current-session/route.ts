@@ -119,20 +119,39 @@ export async function GET(req: NextRequest) {
         )
       ) ?? null;
 
-    // Build the agenda (all matched slots for today, for fallback rendering)
-    const agenda = parityMatched.map((s) => ({
-      slotId: s.id,
-      subjectId: s.subjectId,
-      subjectTitle: s.subject.title,
-      classroomName: `${s.classRoom.gradeLevel} ${s.classRoom.name}`,
-      classRoomId: s.classRoom.id,
-      bellTitle: s.bellSchedule.title,
-      startTime: s.bellSchedule.startTime,
-      endTime: s.bellSchedule.endTime,
-      startTimeFa: hhmmToPersian(s.bellSchedule.startTime),
-      endTimeFa: hhmmToPersian(s.bellSchedule.endTime),
-      weekType: s.weekType,
-    }));
+    // Helper to compute composite classroom name for merged slots
+    const getSlotClassroomName = (slot: typeof parityMatched[0]) => {
+      if (!slot.mergedGroupId) return `${slot.classRoom.gradeLevel} ${slot.classRoom.name}`;
+      const peers = parityMatched.filter((p) => p.mergedGroupId === slot.mergedGroupId);
+      if (peers.length > 1) {
+        return peers.map((p) => `${p.classRoom.gradeLevel} ${p.classRoom.name}`).join(" + ");
+      }
+      return `${slot.classRoom.gradeLevel} ${slot.classRoom.name}`;
+    };
+
+    // Build the agenda, de-duplicating merged group slots into a single item
+    const seenMergedGroups = new Set<string>();
+    const agenda: any[] = [];
+
+    for (const s of parityMatched) {
+      if (s.mergedGroupId) {
+        if (seenMergedGroups.has(s.mergedGroupId)) continue;
+        seenMergedGroups.add(s.mergedGroupId);
+      }
+      agenda.push({
+        slotId: s.id,
+        subjectId: s.subjectId,
+        subjectTitle: s.subject.title,
+        classroomName: getSlotClassroomName(s),
+        classRoomId: s.classRoom.id,
+        bellTitle: s.bellSchedule.title,
+        startTime: s.bellSchedule.startTime,
+        endTime: s.bellSchedule.endTime,
+        startTimeFa: hhmmToPersian(s.bellSchedule.startTime),
+        endTimeFa: hhmmToPersian(s.bellSchedule.endTime),
+        weekType: s.weekType,
+      });
+    }
 
     return NextResponse.json({
       ok: true,
@@ -159,7 +178,7 @@ export async function GET(req: NextRequest) {
             slotId: activeSlot.id,
             classRoomId: activeSlot.classRoom.id,
             subjectId: activeSlot.subjectId,
-            classRoomName: `${activeSlot.classRoom.gradeLevel} ${activeSlot.classRoom.name}`,
+            classRoomName: getSlotClassroomName(activeSlot),
             subjectTitle: activeSlot.subject.title,
             bellTitle: activeSlot.bellSchedule.title,
             startTime: activeSlot.bellSchedule.startTime,
