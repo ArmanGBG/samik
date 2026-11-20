@@ -232,25 +232,25 @@ export function AcademyDirectorDashboard() {
   const kpis = [
     {
       label: "دوره‌ها و کلاس‌ها",
-      value: data?.stats.totalClasses || 0,
+      value: data?.stats?.totalClasses ?? 0,
       icon: BookOpen,
       sublabel: "کلاس‌های کنکور فعال",
     },
     {
       label: "اساتید کنکور",
-      value: data?.stats.totalTeachers || 0,
+      value: data?.stats?.totalTeachers ?? 0,
       icon: Users,
       sublabel: "دبیران ثبت‌شده در آموزشگاه",
     },
     {
       label: "داوطلبان کنکور",
-      value: data?.stats.totalStudents || 0,
+      value: data?.stats?.totalStudents ?? 0,
       icon: GraduationCap,
       sublabel: "عضویت‌های فعال در دوره‌ها",
     },
     {
       label: "نرخ انجام تکالیف",
-      value: `${data?.stats.assignmentRate || 0}٪`,
+      value: `${data?.stats?.assignmentRate ?? 0}٪`,
       icon: FileCheck,
       sublabel: "تعهد به تکالیف کلاسی",
     },
@@ -263,15 +263,15 @@ export function AcademyDirectorDashboard() {
         <div>
           <div className="flex items-center gap-2">
             <h1 className="text-2xl font-bold text-foreground">
-              {data?.academy.name}
+              {data?.academy?.name}
             </h1>
             <Badge variant="outline" className="font-mono text-xs">
-              {data?.academy.code}
+              {data?.academy?.code}
             </Badge>
           </div>
           <p className="text-sm text-muted-foreground mt-1">
             داشبورد مدیریت دوره‌های کنکور و کلاس‌های تقویتی • مدیر:{" "}
-            {data?.academy.managerName}
+            {data?.academy?.managerName}
           </p>
         </div>
 
@@ -302,11 +302,11 @@ export function AcademyDirectorDashboard() {
         <TabsList className="grid grid-cols-2 max-w-md">
           <TabsTrigger value="classes" className="gap-2 text-xs">
             <BookOpen className="w-4 h-4" />
-            کلاس‌ها و بارکدها ({data?.classes.length || 0})
+            کلاس‌ها و بارکدها ({data?.classes?.length ?? 0})
           </TabsTrigger>
           <TabsTrigger value="teachers" className="gap-2 text-xs">
             <Users className="w-4 h-4" />
-            اساتید و تسویه‌حساب ({data?.teachers.length || 0})
+            اساتید و تسویه‌حساب ({data?.teachers?.length ?? 0})
           </TabsTrigger>
         </TabsList>
 

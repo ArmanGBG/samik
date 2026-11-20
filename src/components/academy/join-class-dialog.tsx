@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import {
   Dialog,
   DialogContent,
@@ -29,15 +29,18 @@ export function JoinClassDialog({
 }: JoinClassDialogProps) {
   const [code, setCode] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const submittingRef = useRef(false);
   const [activeTab, setActiveTab] = useState("manual");
 
   const handleSubmit = async (codeToSubmit?: string) => {
+    if (submittingRef.current) return;
     const target = (codeToSubmit || code).trim();
     if (!target) {
       toast.error("لطفاً کد کلاس یا اطلاعات بارکد را وارد کنید.");
       return;
     }
 
+    submittingRef.current = true;
     setSubmitting(true);
     try {
       const res = await fetch("/api/v1/academy/join", {
@@ -58,6 +61,7 @@ export function JoinClassDialog({
       console.error(err);
       toast.error("خطای شبکه هنگام ارتباط با سرور.");
     } finally {
+      submittingRef.current = false;
       setSubmitting(false);
     }
   };

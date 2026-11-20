@@ -108,6 +108,23 @@ export async function POST(req: NextRequest) {
       }
 
       try {
+        if (body.teacherUserId && ctx.role !== "SUPER_ADMIN") {
+          const staff = await db.academyStaff.findUnique({
+            where: {
+              academyId_userId: {
+                academyId: ctx.academyId,
+                userId: body.teacherUserId,
+              },
+            },
+          });
+          if (!staff) {
+            return NextResponse.json(
+              { ok: false, error: "استاد انتخاب‌شده عضو کادر این آموزشگاه نیست." },
+              { status: 400 }
+            );
+          }
+        }
+
         // Generate a unique class code: CLS-XXXXXX
         let classId = generateAcademyClassId();
         let exists = await db.academyClass.findUnique({ where: { id: classId } });

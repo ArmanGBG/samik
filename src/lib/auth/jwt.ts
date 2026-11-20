@@ -22,9 +22,21 @@ import { SignJWT, jwtVerify, type JWTPayload } from "jose";
  * middleware where Node's `jsonwebtoken` is unavailable.
  */
 
-const SECRET = new TextEncoder().encode(
-  process.env.JWT_SECRET ?? "samik-dev-secret-change-in-production-min-32-chars-long"
-);
+function getJwtSecret(): Uint8Array {
+  const secret = process.env.JWT_SECRET;
+  if (!secret || secret.length < 32) {
+    if (process.env.NODE_ENV === "production") {
+      throw new Error(
+        "CRITICAL SECURITY: JWT_SECRET must be set to a secure string with >= 32 characters in production."
+      );
+    }
+  }
+  return new TextEncoder().encode(
+    secret || "samik-dev-secret-change-in-production-min-32-chars-long"
+  );
+}
+
+const SECRET = getJwtSecret();
 const ISSUER = "samik";
 const AUDIENCE = "samik-client";
 

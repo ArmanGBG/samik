@@ -59,17 +59,21 @@ export async function GET(req: NextRequest) {
         let lateCount = 0;
         let absentCount = 0;
         let missingAssignments = 0;
+        let recordedCount = 0;
 
         const sessionsList = eligibleSessions.map((s) => {
           const att = s.attendances[0];
-          const status = att ? att.status : "PRESENT";
+          const hasRecord = !!att;
+          const status = att ? att.status : ("NOT_RECORDED" as const);
           const assignmentDone = att ? att.assignmentDone : true;
 
-          if (status === "PRESENT") presentCount++;
-          else if (status === "LATE") lateCount++;
-          else if (status === "ABSENT") absentCount++;
-
-          if (!assignmentDone) missingAssignments++;
+          if (hasRecord) {
+            recordedCount++;
+            if (status === "PRESENT") presentCount++;
+            else if (status === "LATE") lateCount++;
+            else if (status === "ABSENT") absentCount++;
+            if (!assignmentDone) missingAssignments++;
+          }
 
           return {
             id: s.id,
@@ -83,8 +87,8 @@ export async function GET(req: NextRequest) {
 
         const totalEligible = eligibleSessions.length;
         const attendanceRate =
-          totalEligible > 0
-            ? Math.round(((presentCount + lateCount) / totalEligible) * 100)
+          recordedCount > 0
+            ? Math.round(((presentCount + lateCount) / recordedCount) * 100)
             : 100;
 
         return {

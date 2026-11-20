@@ -3,6 +3,8 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { runWithTenant } from "@/lib/prisma/tenant-context";
 
+import { checkRateLimit } from "@/lib/auth/rate-limiter";
+
 const JoinBody = z.object({
   codeOrToken: z.string().min(1, "کد کلاس یا اطلاعات بارکد الزامی است."),
 });
@@ -19,6 +21,25 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(
       { ok: false, error: "احراز هویت نشده‌اید. لطفاً وارد شوید." },
       { status: 401 }
+    );
+  }
+
+  // Rate limiting: max 10 join attempts per minute per user
+  const rl = checkRateLimit(`join:${userId}`, {
+    max: 10,
+    windowMs: 60 * 1000,
+  });
+  if (rl.limited) {
+    const waitSeconds = Math.ceil(rl.retryAfterMs / 1000);
+    return NextResponse.json(
+      {
+        ok: false,
+        error: `تعداد تلاش‌ها بیش از حد مجاز است. لطفاً ${waitSeconds} ثانیه صبر کنید.`,
+      },
+      {
+        status: 429,
+        headers: { "Retry-After": String(waitSeconds) },
+      }
     );
   }
 
@@ -112,14 +133,31 @@ export async function POST(req: NextRequest) {
       const currentMax = cls.sessions[0]?.sessionNum ?? 0;
       const joinedSessionNum = currentMax + 1;
 
-      const enrollment = await db.academyEnrollment.create({
-        data: {
-          classId: cls.id,
-          studentUserId: userId,
-          joinedAtSessionNum: joinedSessionNum,
-          status: "ACTIVE",
-        },
-      });
+      let enrollment;
+      try {
+        enrollment = await db.academyEnrollment.create({
+          data: {
+            classId: cls.id,
+            studentUserId: userId,
+            joinedAtSessionNum: joinedSessionNum,
+            status: "ACTIVE",
+          },
+        });
+      } catch (createErr: any) {
+        if (createErr?.code === "P2002") {
+          return NextResponse.json({
+            ok: true,
+            message: `شما در حال حاضر عضو کلاس «${cls.name}» هستید.`,
+            alreadyMember: true,
+            classItem: {
+              id: cls.id,
+              name: cls.name,
+              academyName: cls.academy.name,
+            },
+          });
+        }
+        throw createErr;
+      }
 
       return NextResponse.json({
         ok: true,

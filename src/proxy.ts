@@ -94,6 +94,9 @@ export async function proxy(req: NextRequest) {
     if (allowed.has(pathname)) {
       const requestHeaders = new Headers(req.headers);
       requestHeaders.set("x-samik-user-id", payload.userId);
+      requestHeaders.delete("x-samik-school-id");
+      requestHeaders.delete("x-samik-role");
+      requestHeaders.delete("x-samik-enrollment-id");
       return NextResponse.next({ request: { headers: requestHeaders } });
     }
     // Root token + has multiple profiles → force to /select-profile

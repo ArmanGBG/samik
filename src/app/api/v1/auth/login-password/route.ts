@@ -6,6 +6,7 @@ import { signRootToken, AUTH_COOKIE_NAME } from "@/lib/auth/jwt";
 import { runWithTenant } from "@/lib/prisma/tenant-context";
 import { hashPassword, verifyPassword, DEFAULT_INITIAL_PASSWORD } from "@/lib/auth/password";
 import { toAsciiDigitsOnly, toEnglishDigits } from "@/lib/persian-digits";
+import { checkRateLimit } from "@/lib/auth/rate-limiter";
 
 const LoginSchema = z.object({
   identifier: z.string().min(1, "نام کاربری (کد ملی یا شماره موبایل) الزامی است."),
@@ -41,6 +42,25 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(
       { ok: false, error: "نام کاربری و رمز عبور الزامی هستند." },
       { status: 400 }
+    );
+  }
+
+  // Rate limiting: max 5 login attempts per 15 minutes per identifier
+  const rl = checkRateLimit(`login:${cleanIdentifier}`, {
+    max: 5,
+    windowMs: 15 * 60 * 1000,
+  });
+  if (rl.limited) {
+    const waitSeconds = Math.ceil(rl.retryAfterMs / 1000);
+    return NextResponse.json(
+      {
+        ok: false,
+        error: `تلاش بیش از حد برای ورود. لطفاً ${waitSeconds} ثانیه دیگر مجدداً امتحان کنید.`,
+      },
+      {
+        status: 429,
+        headers: { "Retry-After": String(waitSeconds) },
+      }
     );
   }
 

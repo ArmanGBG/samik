@@ -177,9 +177,22 @@ export async function POST(req: NextRequest) {
           );
         }
 
-        // Upsert all records in a transaction
+        // Validate eligible students: must be actively enrolled and joinedAtSessionNum <= session.sessionNum
+        const eligibleEnrollments = await db.academyEnrollment.findMany({
+          where: {
+            classId: session.classId,
+            status: "ACTIVE",
+            joinedAtSessionNum: { lte: session.sessionNum },
+          },
+          select: { studentUserId: true },
+        });
+
+        const eligibleSet = new Set(eligibleEnrollments.map((e) => e.studentUserId));
+        const validRecords = body.records.filter((r) => eligibleSet.has(r.studentUserId));
+
+        // Upsert all valid records in a transaction
         await db.$transaction(async (tx) => {
-          for (const item of body.records) {
+          for (const item of validRecords) {
             await tx.academyAttendance.upsert({
               where: {
                 sessionId_studentUserId: {

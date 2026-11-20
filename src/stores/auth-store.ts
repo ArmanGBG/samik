@@ -95,8 +95,13 @@ export const useAuth = create<AuthStore>((set) => ({
   },
 
   logout: async () => {
-    await fetch("/api/v1/auth/logout", { method: "POST" });
-    set({ state: { status: "unauthenticated" } });
-    window.location.href = "/login";
+    try {
+      await fetch("/api/v1/auth/logout", { method: "POST" });
+    } catch (err) {
+      console.error("[AUTH_LOGOUT_ERROR]", err);
+    } finally {
+      set({ state: { status: "unauthenticated" } });
+      window.location.href = "/login";
+    }
   },
 }));

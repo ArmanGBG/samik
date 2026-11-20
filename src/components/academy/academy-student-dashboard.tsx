@@ -37,7 +37,7 @@ interface SessionInfo {
   sessionNum: number;
   name: string;
   date: string;
-  status: "PRESENT" | "LATE" | "ABSENT";
+  status: "PRESENT" | "LATE" | "ABSENT" | "NOT_RECORDED";
   assignmentDone: boolean;
 }
 
@@ -92,17 +92,21 @@ export function AcademyStudentDashboard() {
 
   const totalClasses = classes.length;
   const totalSessionsAttended = classes.reduce(
-    (sum, c) => sum + c.presentCount + c.lateCount,
+    (sum, c) => sum + (c.presentCount ?? 0) + (c.lateCount ?? 0),
     0
   );
   const totalMissingAssignments = classes.reduce(
-    (sum, c) => sum + c.missingAssignments,
+    (sum, c) => sum + (c.missingAssignments ?? 0),
     0
   );
   const overallAttendanceRate =
     totalClasses > 0
       ? Math.round(
-          classes.reduce((sum, c) => sum + c.attendanceRate, 0) / totalClasses
+          classes.reduce(
+            (sum, c) =>
+              sum + (Number.isFinite(c.attendanceRate) ? c.attendanceRate : 0),
+            0
+          ) / totalClasses
         )
       : 100;
 
@@ -462,6 +466,15 @@ export function AcademyStudentDashboard() {
                                   <Badge className="bg-rose-500/10 text-rose-700 dark:text-rose-300 border-rose-500/20 gap-1 text-[11px]">
                                     <XCircle className="w-3 h-3 text-rose-600" />
                                     غایب
+                                  </Badge>
+                                )}
+                                {s.status === "NOT_RECORDED" && (
+                                  <Badge
+                                    variant="outline"
+                                    className="text-muted-foreground border-muted-foreground/30 gap-1 text-[11px]"
+                                  >
+                                    <Clock className="w-3 h-3" />
+                                    ثبت نشده
                                   </Badge>
                                 )}
 

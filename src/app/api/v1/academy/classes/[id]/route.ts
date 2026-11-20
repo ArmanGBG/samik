@@ -159,8 +159,41 @@ export async function PATCH(
       }
 
       try {
+        const cls = await db.academyClass.findFirst({
+          where: {
+            id,
+            ...(ctx.role !== "SUPER_ADMIN" ? { academyId: ctx.academyId } : {}),
+          },
+          select: { id: true, academyId: true },
+        });
+
+        if (!cls) {
+          return NextResponse.json(
+            { ok: false, error: "کلاس مورد نظر یافت نشد یا دسترسی ندارید." },
+            { status: 404 }
+          );
+        }
+
+        // Validate teacher belongs to this academy
+        if (body.teacherUserId && ctx.role !== "SUPER_ADMIN") {
+          const staff = await db.academyStaff.findUnique({
+            where: {
+              academyId_userId: {
+                academyId: ctx.academyId,
+                userId: body.teacherUserId,
+              },
+            },
+          });
+          if (!staff) {
+            return NextResponse.json(
+              { ok: false, error: "استاد انتخاب‌شده عضو کادر این آموزشگاه نیست." },
+              { status: 400 }
+            );
+          }
+        }
+
         const updated = await db.academyClass.update({
-          where: { id },
+          where: { id: cls.id },
           data: {
             ...(body.name ? { name: body.name.trim() } : {}),
             ...(body.teacherUserId !== undefined ? { teacherUserId: body.teacherUserId } : {}),
@@ -197,8 +230,23 @@ export async function DELETE(
     async (ctx) => {
       const { id } = await params;
       try {
+        const cls = await db.academyClass.findFirst({
+          where: {
+            id,
+            ...(ctx.role !== "SUPER_ADMIN" ? { academyId: ctx.academyId } : {}),
+          },
+          select: { id: true },
+        });
+
+        if (!cls) {
+          return NextResponse.json(
+            { ok: false, error: "کلاس مورد نظر یافت نشد یا دسترسی ندارید." },
+            { status: 404 }
+          );
+        }
+
         await db.academyClass.delete({
-          where: { id },
+          where: { id: cls.id },
         });
 
         return NextResponse.json({

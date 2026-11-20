@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -70,6 +70,7 @@ export function AcademyTeacherDashboard() {
   const [activeClassId, setActiveClassId] = useState<string | null>(null);
   const [classDetail, setClassDetail] = useState<any | null>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
+  const detailReqIdRef = useRef(0);
 
   // New Session Modal
   const [newSessionOpen, setNewSessionOpen] = useState(false);
@@ -107,20 +108,25 @@ export function AcademyTeacherDashboard() {
   };
 
   const loadClassDetail = async (classId: string) => {
+    const reqId = ++detailReqIdRef.current;
     setLoadingDetail(true);
     try {
       const res = await fetch(`/api/v1/academy/classes/${classId}`);
       const data = await res.json();
+      if (reqId !== detailReqIdRef.current) return;
       if (data.ok) {
         setClassDetail(data.classItem);
       } else {
         toast.error(data.error || "خطا در دریافت جزییات کلاس.");
       }
     } catch (err) {
+      if (reqId !== detailReqIdRef.current) return;
       console.error(err);
       toast.error("خطای شبکه");
     } finally {
-      setLoadingDetail(false);
+      if (reqId === detailReqIdRef.current) {
+        setLoadingDetail(false);
+      }
     }
   };
 
@@ -134,6 +140,7 @@ export function AcademyTeacherDashboard() {
   };
 
   const handleBackToClasses = () => {
+    detailReqIdRef.current++;
     setActiveClassId(null);
     setClassDetail(null);
     loadClasses();

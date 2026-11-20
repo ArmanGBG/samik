@@ -11,6 +11,8 @@
  *   - Each OTP can be verified at most 5 times (then it is burned).
  */
 
+import { randomInt } from "crypto";
+
 const OTP_TTL_MS = 2 * 60 * 1000; // 2 minutes
 const OTP_MAX_ATTEMPTS = 5;
 const RATE_LIMIT_WINDOW_MS = 5 * 60 * 1000; // 5 minutes
@@ -70,7 +72,7 @@ export function issueOtp(phone: string): { code: string | null; expiresInMs: num
   rateLimitStore.set(phone, rl);
 
   // Generate 6-digit code
-  const code = Math.floor(100000 + Math.random() * 900000).toString();
+  const code = randomInt(100000, 1000000).toString();
   otpStore.set(phone, {
     code,
     expiresAt: now() + OTP_TTL_MS,

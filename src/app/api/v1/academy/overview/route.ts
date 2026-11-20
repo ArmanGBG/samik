@@ -84,13 +84,13 @@ export async function GET(req: NextRequest) {
         });
 
         const totalRecords = attendances.length;
-        const presentCount = attendances.filter(
+        const attendedCount = attendances.filter(
           (a) => a.status === "PRESENT" || a.status === "LATE"
         ).length;
         const assignmentCount = attendances.filter((a) => a.assignmentDone).length;
 
         const attendanceRate =
-          totalRecords > 0 ? Math.round((presentCount / totalRecords) * 100) : 100;
+          totalRecords > 0 ? Math.round((attendedCount / totalRecords) * 100) : 100;
         const assignmentRate =
           totalRecords > 0 ? Math.round((assignmentCount / totalRecords) * 100) : 100;
 

@@ -142,35 +142,14 @@ export async function POST(req: NextRequest) {
         const parsedDate = body.date ? new Date(body.date) : new Date();
         const sessionDate = isNaN(parsedDate.getTime()) ? new Date() : parsedDate;
 
-        // Create the session + default attendance records for eligible students
-        const session = await db.$transaction(async (tx) => {
-          const created = await tx.academySession.create({
-            data: {
-              classId: body.classId,
-              sessionNum: nextNum,
-              name: sessionName,
-              date: sessionDate,
-            },
-          });
-
-          // Pre-populate attendance for enrolled students eligible for this session:
-          // Rule: student must have joinedAtSessionNum <= nextNum
-          const eligibleStudents = cls.enrollments.filter(
-            (e) => e.joinedAtSessionNum <= nextNum
-          );
-
-          if (eligibleStudents.length > 0) {
-            await tx.academyAttendance.createMany({
-              data: eligibleStudents.map((e) => ({
-                sessionId: created.id,
-                studentUserId: e.studentUserId,
-                status: "PRESENT",
-                assignmentDone: true,
-              })),
-            });
-          }
-
-          return created;
+        // Create the session (attendance will be recorded when teacher submits roll-call)
+        const session = await db.academySession.create({
+          data: {
+            classId: body.classId,
+            sessionNum: nextNum,
+            name: sessionName,
+            date: sessionDate,
+          },
         });
 
         return NextResponse.json({

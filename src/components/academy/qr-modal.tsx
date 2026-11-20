@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import {
   Dialog,
   DialogContent,
@@ -21,6 +21,15 @@ interface QrModalProps {
   qrToken: string;
 }
 
+function escapeHtml(str: string): string {
+  return String(str)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 export function QrModal({
   open,
   onOpenChange,
@@ -29,27 +38,53 @@ export function QrModal({
   qrToken,
 }: QrModalProps) {
   const [copied, setCopied] = useState(false);
+  const copyTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (copyTimeoutRef.current) clearTimeout(copyTimeoutRef.current);
+    };
+  }, []);
 
   const qrImageUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&margin=10&data=${encodeURIComponent(
     qrToken
   )}`;
 
-  const handleCopy = () => {
-    navigator.clipboard.writeText(classId);
-    setCopied(true);
-    toast.success("کد کلاس با موفقیت کپی شد.");
-    setTimeout(() => setCopied(false), 2000);
+  const handleCopy = async () => {
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(classId);
+      } else {
+        const textarea = document.createElement("textarea");
+        textarea.value = classId;
+        textarea.style.position = "fixed";
+        textarea.style.opacity = "0";
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand("copy");
+        document.body.removeChild(textarea);
+      }
+      setCopied(true);
+      toast.success("کد کلاس با موفقیت کپی شد.");
+      if (copyTimeoutRef.current) clearTimeout(copyTimeoutRef.current);
+      copyTimeoutRef.current = setTimeout(() => setCopied(false), 2000);
+    } catch {
+      toast.error("کپی کردن کد با خطا مواجه شد.");
+    }
   };
 
   const handlePrint = () => {
     const printWindow = window.open("", "_blank");
     if (!printWindow) return;
 
+    const safeTitle = escapeHtml(className);
+    const safeCode = escapeHtml(classId);
+
     printWindow.document.write(`
       <!DOCTYPE html>
       <html dir="rtl" lang="fa">
       <head>
-        <title>بارکد ورود به کلاس ${className}</title>
+        <title>بارکد ورود به کلاس ${safeTitle}</title>
         <style>
           @page { size: A4 portrait; margin: 20mm; }
           body { font-family: system-ui, -apple-system, sans-serif; text-align: center; padding: 40px; }
@@ -63,11 +98,11 @@ export function QrModal({
       </head>
       <body>
         <div class="container">
-          <h1>کلاس کنکور: ${className}</h1>
+          <h1>کلاس کنکور: ${safeTitle}</h1>
           <p>سامانه مدیریت آموزشی سامیک</p>
           <img src="${qrImageUrl}" class="qr" alt="QR Code" />
           <div>کد اتصال دستی به کلاس:</div>
-          <div class="code-box">${classId}</div>
+          <div class="code-box">${safeCode}</div>
           <div class="instructions">
             <strong>راهنمای داوطلبان:</strong><br>
             ۱. وارد سامانه سامیک شوید.<br>
