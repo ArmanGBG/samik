@@ -15,6 +15,8 @@ export type ProfileEntry = {
   studentEnrollmentId?: string;
   label: string;
   status?: "ACTIVE" | "PENDING_CONFIRMATION" | "ARCHIVED";
+  type?: "SCHOOL" | "ACADEMY";
+  academyId?: string;
 };
 
 type SessionState =

@@ -5,6 +5,8 @@ import { withTenantContext } from "@/lib/middleware-helpers/tenant-guard";
 import { db } from "@/lib/db";
 import { hashPassword, DEFAULT_INITIAL_PASSWORD } from "@/lib/auth/password";
 
+export const dynamic = "force-dynamic";
+
 const CreateBody = z.object({
   firstName: z.string().min(1, "نام الزامی است."),
   lastName: z.string().min(1, "نام خانوادگی الزامی است."),
@@ -420,6 +422,20 @@ export async function PATCH(req: NextRequest) {
           await tx.schoolEnrollment.update({
             where: { id },
             data: enrollmentUpdate,
+          });
+        }
+
+        // If guardianPhone1 changed, sync all DRAFT notifications in outbox for this student
+        if (body.guardianPhone1) {
+          await tx.notificationOutbox.updateMany({
+            where: {
+              schoolId: enrollment.schoolId,
+              studentUserId: enrollment.studentUserId,
+              status: "DRAFT",
+            },
+            data: {
+              recipientPhone: body.guardianPhone1,
+            },
           });
         }
 

@@ -18,6 +18,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import {
   School,
+  Building2,
   Users,
   CalendarClock,
   CalendarRange,
@@ -32,9 +33,11 @@ import {
   GraduationCap,
   DoorClosed,
   Clock,
+  KeyRound,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { RealtimeProvider, useRealtimeStatus } from "@/lib/realtime/realtime-context";
+import { ChangePasswordDialog } from "@/components/auth/change-password-dialog";
 
 interface NavItem {
   href: string;
@@ -48,9 +51,10 @@ interface NavItem {
 }
 
 const NAV: NavItem[] = [
-  { href: "", label: "داشبورد", icon: LayoutDashboard, roles: ["SUPER_ADMIN", "PRINCIPAL", "DEPUTY", "TEACHER", "STUDENT"] },
+  { href: "", label: "داشبورد", icon: LayoutDashboard, roles: ["SUPER_ADMIN", "PRINCIPAL", "DEPUTY", "TEACHER", "STUDENT", "ACADEMY_MANAGER", "ACADEMY_TEACHER", "ACADEMY_ASSISTANT", "ACADEMY_STUDENT"] },
   // SuperAdmin
   { href: "schools", label: "مدارس", icon: School, roles: ["SUPER_ADMIN"] },
+  { href: "academies", label: "آموزشگاه‌ها", icon: Building2, roles: ["SUPER_ADMIN"] },
 
   // Core Management (Principal & SuperAdmin)
   { href: "staff", label: "کادر و پرسنل", icon: Users, roles: ["SUPER_ADMIN", "PRINCIPAL"] },
@@ -79,6 +83,10 @@ const ROLE_LABEL: Record<string, string> = {
   DEPUTY: "ناظم / معاون",
   TEACHER: "معلم",
   STUDENT: "دانش‌آموز / ولی",
+  ACADEMY_MANAGER: "مدیر آموزشگاه کنکور",
+  ACADEMY_TEACHER: "استاد کنکور",
+  ACADEMY_ASSISTANT: "دستیار آموزشگاه",
+  ACADEMY_STUDENT: "دانش‌آموز کنکور",
 };
 
 const ROLE_ROUTE: Record<string, string> = {
@@ -87,6 +95,10 @@ const ROLE_ROUTE: Record<string, string> = {
   DEPUTY: "/deputy",
   TEACHER: "/teacher",
   STUDENT: "/student",
+  ACADEMY_MANAGER: "/academy",
+  ACADEMY_TEACHER: "/academy/teacher",
+  ACADEMY_ASSISTANT: "/academy",
+  ACADEMY_STUDENT: "/academy/student",
 };
 
 const APP_VERSION = "۰.۱.۰";
@@ -96,6 +108,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const auth = useAuth();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [changePwdOpen, setChangePwdOpen] = useState(false);
 
   useEffect(() => {
     auth.fetch();
@@ -203,6 +216,10 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
               </div>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={() => setChangePwdOpen(true)} className="cursor-pointer gap-2">
+              <KeyRound className="h-4 w-4" />
+              تغییر رمز عبور
+            </DropdownMenuItem>
             <DropdownMenuItem onClick={() => router.push("/select-profile")} className="cursor-pointer gap-2">
               <ShieldCheck className="h-4 w-4" />
               تغییر نقش یا مدرسه (پروفایل)
@@ -234,6 +251,8 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
           </footer>
         </main>
       </div>
+
+      <ChangePasswordDialog open={changePwdOpen} onOpenChange={setChangePwdOpen} />
     </div>
     </RealtimeProvider>
   );

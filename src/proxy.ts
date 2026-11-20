@@ -44,6 +44,11 @@ const ROLE_PATH_MAP: Array<{ prefix: string; roles: string[] }> = [
   { prefix: "/teacher", roles: ["SUPER_ADMIN", "TEACHER"] },
   { prefix: "/student", roles: ["STUDENT"] },
   { prefix: "/api/v1/super-admin", roles: ["SUPER_ADMIN"] },
+  // Academy routes
+  { prefix: "/academy/teacher", roles: ["SUPER_ADMIN", "ACADEMY_TEACHER", "ACADEMY_MANAGER"] },
+  { prefix: "/academy/student", roles: ["SUPER_ADMIN", "ACADEMY_STUDENT"] },
+  { prefix: "/academy", roles: ["SUPER_ADMIN", "ACADEMY_MANAGER"] },
+  { prefix: "/api/v1/academy", roles: ["SUPER_ADMIN", "ACADEMY_MANAGER", "ACADEMY_TEACHER", "ACADEMY_STUDENT", "ACADEMY_ASSISTANT"] },
 ];
 
 export async function proxy(req: NextRequest) {
@@ -84,6 +89,7 @@ export async function proxy(req: NextRequest) {
       "/api/v1/auth/select-profile",
       "/api/v1/auth/logout",
       "/api/v1/auth/password/change",
+      "/api/v1/academy/join",
     ]);
     if (allowed.has(pathname)) {
       const requestHeaders = new Headers(req.headers);
@@ -114,6 +120,18 @@ export async function proxy(req: NextRequest) {
   }
 
   // Layer 3: Role Guard — route-prefix RBAC
+  const ROLE_DASHBOARD_MAP: Record<string, string> = {
+    SUPER_ADMIN: "/super-admin",
+    PRINCIPAL: "/principal",
+    DEPUTY: "/deputy",
+    TEACHER: "/teacher",
+    STUDENT: "/student",
+    ACADEMY_MANAGER: "/academy",
+    ACADEMY_TEACHER: "/academy/teacher",
+    ACADEMY_ASSISTANT: "/academy",
+    ACADEMY_STUDENT: "/academy/student",
+  };
+
   for (const { prefix, roles } of ROLE_PATH_MAP) {
     if (pathname.startsWith(prefix)) {
       if (!roles.includes(payload.role)) {
@@ -125,7 +143,7 @@ export async function proxy(req: NextRequest) {
         }
         // Bounce to the user's own dashboard
         const url = req.nextUrl.clone();
-        url.pathname = `/${payload.role.toLowerCase().replace("_", "-")}`;
+        url.pathname = ROLE_DASHBOARD_MAP[payload.role] || `/${payload.role.toLowerCase().replace("_", "-")}`;
         url.search = "";
         return NextResponse.redirect(url);
       }

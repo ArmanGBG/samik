@@ -136,6 +136,13 @@ model User {
   behavioralPointsGiven BehavioralPoint[]   @relation("PointsByTeacher")
   behavioralPointsFor   BehavioralPoint[]   @relation("PointsForStudent")
   notifications         NotificationOutbox[]
+
+  // ── Konkur Academy Relations ──
+  managedAcademies      Academy[]           @relation("ManagedAcademies")
+  academyStaff          AcademyStaff[]      @relation("AcademyStaffUser")
+  academyClassesTaught  AcademyClass[]      @relation("AcademyClassTeacher")
+  academyEnrollments    AcademyEnrollment[] @relation("AcademyEnrollmentStudent")
+  academyAttendances    AcademyAttendance[] @relation("AcademyAttendanceStudent")
 }
 
 model School {
@@ -433,3 +440,122 @@ model NotificationOutbox {
 
   @@index([schoolId, status, createdAt])
 }
+
+// ============================================================
+//  BLOK 6 — Konkur Academies & Institutes (Academy Mode)
+// ============================================================
+
+enum AcademyRole {
+  MANAGER
+  TEACHER
+  ASSISTANT
+}
+
+enum AcademyAttendanceStatus {
+  PRESENT
+  ABSENT
+  LATE
+}
+
+model Academy {
+  id            String         @id @default(uuid())
+  name          String
+  code          String         @unique
+  managerUserId String
+  managerUser   User           @relation("ManagedAcademies", fields: [managerUserId], references: [id], onDelete: Restrict)
+  status        SchoolStatus   @default(ACTIVE)
+  province      String?
+  city          String?
+  phone         String?
+  address       String?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  classes       AcademyClass[]
+  staff         AcademyStaff[]
+
+  @@index([status, createdAt])
+}
+
+model AcademyStaff {
+  id              String      @id @default(uuid())
+  academyId       String
+  userId          String
+  role            AcademyRole @default(TEACHER)
+  teachingSubject String?
+  bankCardNo      String?
+  shebaNo         String?
+  createdAt       DateTime    @default(now())
+
+  academy         Academy     @relation(fields: [academyId], references: [id], onDelete: Cascade)
+  user            User        @relation("AcademyStaffUser", fields: [userId], references: [id], onDelete: Restrict)
+
+  @@unique([academyId, userId])
+  @@index([academyId, role])
+}
+
+model AcademyClass {
+  id            String              @id // CLS-XXXXXX (unique short code)
+  name          String              // e.g. "شیمی جامع کنکور ۱۴۰۵"
+  academyId     String
+  teacherUserId String?
+  teacherUser   User?               @relation("AcademyClassTeacher", fields: [teacherUserId], references: [id], onDelete: SetNull)
+  schedule      String?             // e.g. "پنجشنبه‌ها ۱۶:۰۰ الی ۱۹:۳۰"
+  qrToken       String              @unique @default(uuid())
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+
+  academy       Academy             @relation(fields: [academyId], references: [id], onDelete: Cascade)
+  enrollments   AcademyEnrollment[]
+  sessions      AcademySession[]
+
+  @@index([academyId])
+}
+
+model AcademyEnrollment {
+  id                 String       @id @default(uuid())
+  classId            String
+  studentUserId      String
+  joinedAtSessionNum Int          @default(1)
+  status             String       @default("ACTIVE") // ACTIVE | LEFT
+  createdAt          DateTime     @default(now())
+
+  class              AcademyClass @relation(fields: [classId], references: [id], onDelete: Cascade)
+  studentUser        User         @relation("AcademyEnrollmentStudent", fields: [studentUserId], references: [id], onDelete: Restrict)
+
+  @@unique([classId, studentUserId])
+  @@index([studentUserId, status])
+  @@index([classId, status])
+}
+
+model AcademySession {
+  id         String              @id @default(uuid())
+  classId    String
+  sessionNum Int                 // 1, 2, 3, ...
+  name       String              // default: "جلسه ۱", editable, or "جلسه فوق‌العاده"
+  date       DateTime            @default(now())
+  createdAt  DateTime            @default(now())
+
+  class       AcademyClass       @relation(fields: [classId], references: [id], onDelete: Cascade)
+  attendances AcademyAttendance[]
+
+  @@unique([classId, sessionNum])
+  @@index([classId, date])
+}
+
+model AcademyAttendance {
+  id             String                  @id @default(uuid())
+  sessionId      String
+  studentUserId  String
+  status         AcademyAttendanceStatus @default(PRESENT)
+  assignmentDone Boolean                 @default(true)
+  createdAt      DateTime                @default(now())
+  updatedAt      DateTime                @updatedAt
+
+  session        AcademySession          @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  studentUser    User                    @relation("AcademyAttendanceStudent", fields: [studentUserId], references: [id], onDelete: Restrict)
+
+  @@unique([sessionId, studentUserId])
+  @@index([sessionId, status])
+}
+

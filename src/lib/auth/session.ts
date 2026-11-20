@@ -21,6 +21,8 @@ export interface ProfileEntry {
   /** Display label for the switcher (e.g. "ولیِ علی — مدرسه الف"). */
   label: string;
   status?: "ACTIVE" | "PENDING_CONFIRMATION" | "ARCHIVED";
+  type?: "SCHOOL" | "ACADEMY";
+  academyId?: string;
 }
 
 export async function buildUserProfiles(userId: string): Promise<ProfileEntry[]> {
@@ -94,6 +96,54 @@ export async function buildUserProfiles(userId: string): Promise<ProfileEntry[]>
       }
     }
 
+    // === Academy Staff roles (MANAGER / TEACHER / ASSISTANT) ===
+    const academyStaff = await db.academyStaff.findMany({
+      where: { userId },
+      include: { academy: true },
+    });
+
+    for (const st of academyStaff) {
+      const roleName =
+        st.role === "MANAGER"
+          ? "ACADEMY_MANAGER"
+          : st.role === "TEACHER"
+          ? "ACADEMY_TEACHER"
+          : "ACADEMY_ASSISTANT";
+
+      profiles.push({
+        schoolId: st.academyId,
+        schoolName: st.academy.name,
+        schoolSubdomain: st.academy.code,
+        role: roleName,
+        label: `${roleToPersian(roleName)} — ${st.academy.name}`,
+        type: "ACADEMY",
+        academyId: st.academyId,
+      });
+    }
+
+    // === Academy Student enrollments ===
+    const academyEnrollments = await db.academyEnrollment.findMany({
+      where: { studentUserId: userId, status: "ACTIVE" },
+      include: { class: { include: { academy: true } } },
+    });
+
+    const seenAcademies = new Set<string>();
+    for (const ae of academyEnrollments) {
+      const acId = ae.class.academyId;
+      if (!seenAcademies.has(acId)) {
+        seenAcademies.add(acId);
+        profiles.push({
+          schoolId: acId,
+          schoolName: ae.class.academy.name,
+          schoolSubdomain: ae.class.academy.code,
+          role: "ACADEMY_STUDENT",
+          label: `داوطلب کنکور — ${ae.class.academy.name}`,
+          type: "ACADEMY",
+          academyId: acId,
+        });
+      }
+    }
+
     return profiles;
   });
 }
@@ -105,6 +155,10 @@ export function roleToPersian(role: string): string {
     DEPUTY: "ناظم / معاون",
     TEACHER: "معلم",
     STUDENT: "دانش‌آموز / ولی",
+    ACADEMY_MANAGER: "مدیر آموزشگاه کنکور",
+    ACADEMY_TEACHER: "استاد کنکور",
+    ACADEMY_ASSISTANT: "پشتیبان / دستیار",
+    ACADEMY_STUDENT: "داوطلب کنکور",
   };
   return map[role] ?? role;
 }

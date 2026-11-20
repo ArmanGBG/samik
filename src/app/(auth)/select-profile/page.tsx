@@ -27,8 +27,12 @@ import {
   ShieldAlert,
   Check,
   X,
+  Building2,
+  BookOpen,
+  PlusCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { JoinClassDialog } from "@/components/academy/join-class-dialog";
 
 const ROLE_STYLES: Record<
   string,
@@ -39,12 +43,40 @@ const ROLE_STYLES: Record<
   DEPUTY: { icon: Users, tint: "text-emerald bg-emerald-50", ring: "hover:border-emerald" },
   TEACHER: { icon: GraduationCap, tint: "text-info bg-sky-50", ring: "hover:border-info" },
   STUDENT: { icon: GraduationCap, tint: "text-warning bg-amber-50", ring: "hover:border-warning" },
+  ACADEMY_MANAGER: { icon: Building2, tint: "text-amber-700 bg-amber-50", ring: "hover:border-amber-500" },
+  ACADEMY_TEACHER: { icon: BookOpen, tint: "text-teal-700 bg-teal-50", ring: "hover:border-teal-500" },
+  ACADEMY_ASSISTANT: { icon: Users, tint: "text-indigo-700 bg-indigo-50", ring: "hover:border-indigo-500" },
+  ACADEMY_STUDENT: { icon: GraduationCap, tint: "text-emerald-700 bg-emerald-50", ring: "hover:border-emerald-500" },
 };
+
+function getRoleRoute(role: string): string {
+  switch (role) {
+    case "SUPER_ADMIN":
+      return "/super-admin";
+    case "PRINCIPAL":
+      return "/principal";
+    case "DEPUTY":
+      return "/deputy";
+    case "TEACHER":
+      return "/teacher";
+    case "STUDENT":
+      return "/student";
+    case "ACADEMY_MANAGER":
+      return "/academy";
+    case "ACADEMY_TEACHER":
+      return "/academy/teacher";
+    case "ACADEMY_STUDENT":
+      return "/academy/student";
+    default:
+      return `/${role.toLowerCase().replace("_", "-")}`;
+  }
+}
 
 export default function SelectProfilePage() {
   const router = useRouter();
   const auth = useAuth();
   const [selecting, setSelecting] = useState<string | null>(null);
+  const [joinOpen, setJoinOpen] = useState(false);
 
   useEffect(() => {
     auth.fetch();
@@ -72,8 +104,7 @@ export default function SelectProfilePage() {
       (p.role === "STUDENT" ? p.studentEnrollmentId === currentStudentEnrollmentId : true)
     ) {
       // Already on this profile — navigate straight to dashboard
-      const slug = p.role.toLowerCase().replace("_", "-");
-      router.replace(`/${slug}`);
+      router.replace(getRoleRoute(p.role));
       return;
     }
 
@@ -95,8 +126,7 @@ export default function SelectProfilePage() {
       }
       toast.success(`ورود به ${data.profile.schoolName} با نقش ${data.profile.label ?? data.profile.role}`);
       await auth.fetch();
-      const slug = data.profile.role.toLowerCase().replace("_", "-");
-      router.replace(`/${slug}`);
+      router.replace(getRoleRoute(data.profile.role));
     } catch {
       toast.error("خطا در برقراری ارتباط با سرور.");
     } finally {
@@ -172,17 +202,26 @@ export default function SelectProfilePage() {
           {profiles.length === 0 ? (
             <EmptyState
               icon={ShieldAlert}
-              title="شما هنوز در هیچ مدرسه‌ای ثبت نشده‌اید."
-              description="برای دسترسی به سامانه، باید توسط مدیر مدرسه‌ای به پلتفرم دعوت شوید. اگر فکر می‌کنید این خطا است، با پشتیبانی تماس بگیرید."
+              title="شما هنوز در هیچ مدرسه یا کلاسی عضو نیستید."
+              description="برای دسترسی، باید توسط مدیر مدرسه اضافه شوید یا با داشتن کد کلاس، در یک کلاس کنکور عضو شوید."
               action={
-                <Button
-                  variant="outline"
-                  onClick={() => auth.logout()}
-                  className="cursor-pointer gap-2"
-                >
-                  <LogOut className="h-4 w-4" />
-                  خروج از حساب کاربری
-                </Button>
+                <div className="flex flex-col sm:flex-row items-center gap-2 mt-2">
+                  <Button
+                    onClick={() => setJoinOpen(true)}
+                    className="gap-2 bg-purple-600 hover:bg-purple-700 text-white text-xs h-9"
+                  >
+                    <PlusCircle className="h-4 w-4" />
+                    عضویت در کلاس کنکور با کد
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => auth.logout()}
+                    className="cursor-pointer gap-2 text-xs h-9"
+                  >
+                    <LogOut className="h-4 w-4" />
+                    خروج از حساب
+                  </Button>
+                </div>
               }
             />
           ) : (
@@ -233,6 +272,14 @@ export default function SelectProfilePage() {
                         <p className="text-sm font-semibold text-foreground truncate">
                           {p.label}
                         </p>
+                        {p.type === "ACADEMY" && (
+                          <Badge
+                            variant="secondary"
+                            className="bg-amber-100 text-amber-800 border-amber-200 text-[10px] h-5 px-1.5 shrink-0 font-medium"
+                          >
+                            آموزشگاه کنکور
+                          </Badge>
+                        )}
                         {isActive && (
                           <Badge
                             variant="outline"
@@ -282,8 +329,7 @@ export default function SelectProfilePage() {
                         className="h-7 text-xs text-emerald hover:text-emerald-700 hover:bg-emerald-100/50 font-medium gap-1 px-2 shrink-0"
                         onClick={(e) => {
                           e.stopPropagation();
-                          const slug = p.role.toLowerCase().replace("_", "-");
-                          router.replace(`/${slug}`);
+                          router.replace(getRoleRoute(p.role));
                         }}
                       >
                         ورود به پنل
@@ -297,25 +343,33 @@ export default function SelectProfilePage() {
               })}
 
               <div className="pt-3 mt-2 border-t border-border flex flex-col sm:flex-row items-center justify-between gap-2">
-                {isContextual && currentRole ? (
+                <div className="flex items-center gap-2 w-full sm:w-auto">
+                  {isContextual && currentRole ? (
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        router.push(getRoleRoute(currentRole));
+                      }}
+                      className="w-full sm:w-auto text-navy cursor-pointer gap-2 text-xs h-9"
+                    >
+                      <ArrowRight className="h-4 w-4" />
+                      بازگشت به پنل فعلی
+                    </Button>
+                  ) : null}
                   <Button
                     variant="outline"
-                    onClick={() => {
-                      const slug = currentRole.toLowerCase().replace("_", "-");
-                      router.push(`/${slug}`);
-                    }}
-                    className="w-full sm:w-auto text-navy cursor-pointer gap-2"
+                    onClick={() => setJoinOpen(true)}
+                    className="w-full sm:w-auto text-purple-700 border-purple-300 hover:bg-purple-50 cursor-pointer gap-1.5 text-xs h-9"
                   >
-                    <ArrowRight className="h-4 w-4" />
-                    بازگشت به پنل فعلی
+                    <PlusCircle className="h-3.5 w-3.5" />
+                    عضویت در کلاس کنکور جدید
                   </Button>
-                ) : (
-                  <div />
-                )}
+                </div>
+
                 <Button
                   variant="ghost"
                   onClick={() => auth.logout()}
-                  className="w-full sm:w-auto text-muted-foreground hover:text-destructive hover:bg-destructive/10 cursor-pointer gap-2"
+                  className="w-full sm:w-auto text-muted-foreground hover:text-destructive hover:bg-destructive/10 cursor-pointer gap-2 text-xs h-9"
                 >
                   <LogOut className="h-4 w-4" />
                   خروج از حساب کاربری
@@ -325,6 +379,12 @@ export default function SelectProfilePage() {
           )}
         </CardContent>
       </Card>
+
+      <JoinClassDialog
+        open={joinOpen}
+        onOpenChange={setJoinOpen}
+        onSuccess={() => auth.fetch()}
+      />
     </div>
   );
 }

@@ -8,7 +8,7 @@ export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ slotId: string }> }
 ) {
-  return withTenantContext(req, ["TEACHER"], async (ctx) => {
+  return withTenantContext(req, ["TEACHER", "PRINCIPAL", "DEPUTY", "SUPER_ADMIN"], async (ctx) => {
     const { slotId } = await params;
 
     // 1. Fetch the slot
@@ -25,7 +25,11 @@ export async function GET(
       return NextResponse.json({ ok: false, error: "کلاس یافت نشد." }, { status: 404 });
     }
 
-    if (slot.teacherUserId !== ctx.userId) {
+    const isStaff = ["PRINCIPAL", "DEPUTY", "SUPER_ADMIN"].includes(ctx.role);
+    if (!isStaff && slot.teacherUserId !== ctx.userId) {
+      return NextResponse.json({ ok: false, error: "دسترسی غیرمجاز." }, { status: 403 });
+    }
+    if (isStaff && slot.schoolId !== ctx.schoolId) {
       return NextResponse.json({ ok: false, error: "دسترسی غیرمجاز." }, { status: 403 });
     }
 
@@ -84,7 +88,7 @@ export async function GET(
       where: {
         classRoomId: { in: mergedClassroomIds },
         subjectId: slot.subjectId,
-        teacherUserId: ctx.userId,
+        teacherUserId: slot.teacherUserId,
         date: todayDate,
         title: {
           contains: "فعالیت کلاسی",

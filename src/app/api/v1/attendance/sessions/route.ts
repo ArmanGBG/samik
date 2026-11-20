@@ -57,7 +57,7 @@ export async function POST(req: NextRequest) {
   const idempotencyKey = req.headers.get(IDEMPOTENCY_HEADER);
 
   return withIdempotency(idempotencyKey, async () => {
-    return withTenantContext(req, ["TEACHER"], async (ctx) => {
+    return withTenantContext(req, ["TEACHER", "PRINCIPAL", "DEPUTY", "SUPER_ADMIN"], async (ctx) => {
     let body: z.infer<typeof SubmitBody>;
     try {
       body = SubmitBody.parse(await req.json());
@@ -74,13 +74,15 @@ export async function POST(req: NextRequest) {
     // Resolved once and reused for the "is this today?" check, the session
     // date, and the notification timestamp.
     const now = new Date();
+    const isStaff = ["PRINCIPAL", "DEPUTY", "SUPER_ADMIN"].includes(ctx.role);
 
       try {
-        // Validate the timetable slot exists + belongs to this teacher
+        // Validate the timetable slot exists + belongs to this school (and teacher if role is TEACHER)
         const slot = await db.timetableSlot.findFirst({
           where: {
             id: body.timetableSlotId,
-            teacherUserId: ctx.userId,
+            schoolId: ctx.schoolId,
+            ...(!isStaff ? { teacherUserId: ctx.userId } : {}),
           },
           include: {
             classRoom: { select: { id: true, name: true, gradeLevel: true } },
@@ -94,21 +96,19 @@ export async function POST(req: NextRequest) {
           status: 404,
           body: {
             ok: false,
-            error: "خانه برنامه هفتگی یافت نشد یا متعلق به شما نیست.",
+            error: isStaff ? "خانه برنامه هفتگی در این مدرسه یافت نشد." : "خانه برنامه هفتگی یافت نشد یا متعلق به شما نیست.",
           },
         };
       }
 
-      // Validate the date matches today (prevent backdating for now).
-      // The client sends the school-local (Tehran) date, so compare against
-      // the Tehran calendar day. Using the UTC date here rejected every
-      // submission between 20:30 and 24:00 UTC (i.e. 00:00-03:30 Tehran).
-      if (body.date !== tehranDateKey(now)) {
+      // Validate the date matches today for teachers (prevent backdating by teachers).
+      // Administrators (principal/deputy) may submit or correct attendance for any date.
+      if (!isStaff && body.date !== tehranDateKey(now)) {
         return {
           status: 400,
           body: {
             ok: false,
-            error: "ثبت حضور و غیاب فقط برای امروز مجاز است.",
+            error: "ثبت حضور و غیاب برای معلمان فقط برای امروز مجاز است.",
           },
         };
       }

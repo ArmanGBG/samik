@@ -5,7 +5,17 @@ import { buildUserProfiles } from "@/lib/auth/session";
 
 const Body = z.object({
   schoolId: z.string().min(1), // UUID for normal roles, "__global__" for SUPER_ADMIN
-  role: z.enum(["SUPER_ADMIN", "PRINCIPAL", "DEPUTY", "TEACHER", "STUDENT"]),
+  role: z.enum([
+    "SUPER_ADMIN",
+    "PRINCIPAL",
+    "DEPUTY",
+    "TEACHER",
+    "STUDENT",
+    "ACADEMY_MANAGER",
+    "ACADEMY_TEACHER",
+    "ACADEMY_ASSISTANT",
+    "ACADEMY_STUDENT",
+  ]),
   studentEnrollmentId: z.string().uuid().optional(),
 });
 

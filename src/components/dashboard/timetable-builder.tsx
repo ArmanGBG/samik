@@ -46,14 +46,17 @@ import {
   DoorClosed,
   BookOpen,
   Users,
-  Clock,
   GraduationCap,
   Pencil,
+  Printer,
+  Clock,
 } from "lucide-react";
 import { DAYS_OF_WEEK } from "@/lib/timetable/days";
 import { hhmmToPersian } from "@/lib/timetable/time-utils";
 import { TEHRAN_TIME_ZONE, zonedDateKeyFor } from "@/lib/timetable/tehran-time";
 import { cn } from "@/lib/utils";
+import { triggerPrintHtml } from "@/lib/print/print-engine";
+import { generateClassTimetableHtml } from "@/lib/print/school-print-templates";
 import { PageHeader } from "@/components/shared/page-header";
 import { KpiCardGrid } from "@/components/shared/kpi-card";
 import { ScrollReveal } from "@/components/shared/scroll-reveal";
@@ -620,23 +623,75 @@ export function TimetableBuilder({
                 </button>
               </div>
             </div>
-            {hideHeader && (
-              <Button
-                size="sm"
-                onClick={() => {
-                  setForm((f) => ({
-                    ...f,
-                    classRoomId: viewMode === "classroom" ? (f.classRoomId || activeClassroom) : f.classRoomId,
-                    teacherUserId: viewMode === "teacher" ? (f.teacherUserId || activeTeacher) : f.teacherUserId,
-                  }));
-                  setDialogOpen(true);
-                }}
-                className="bg-emerald hover:bg-emerald-dark gap-1.5 shadow-sm cursor-pointer text-xs"
-              >
-                <Plus className="h-3.5 w-3.5" />
-                افزودن درس به برنامه
-              </Button>
-            )}
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    const isCls = viewMode === "classroom";
+                    const targetName = isCls
+                      ? `${activeClassroomObj?.gradeLevel || ""} ${activeClassroomObj?.name || ""}`.trim()
+                      : `${activeTeacherObj?.firstName || ""} ${activeTeacherObj?.lastName || ""}`.trim();
+
+                    const relevantSlots = isCls
+                      ? slots.filter((s) => s.classRoom?.id === activeClassroom)
+                      : slots.filter((s) => s.teacher?.id === activeTeacher);
+
+                    const printSlots = relevantSlots.map((s) => ({
+                      id: s.id,
+                      dayOfWeek: s.dayOfWeek,
+                      bellScheduleId: s.bellSchedule.id,
+                      subjectTitle: s.subject.title,
+                      teacherName: `${s.teacher.firstName || ""} ${s.teacher.lastName || ""}`.trim(),
+                      classroomName: `${s.classRoom.gradeLevel} ${s.classRoom.name}`,
+                    }));
+
+                    const printBells = bells.map((b, idx) => ({
+                      id: b.id,
+                      title: b.title,
+                      bellOrder: idx + 1,
+                      startTime: b.startTime,
+                      endTime: b.endTime,
+                    }));
+
+                    const html = generateClassTimetableHtml(
+                      targetName,
+                      printSlots,
+                      printBells,
+                      {
+                        subTitle: isCls ? `برنامه هفتگی کلاس درس مصوب آموزشگاه` : `برنامه هفتگی تدریس همکار محترم`,
+                        meta: {
+                          schoolName: "آموزشگاه",
+                        },
+                      }
+                    );
+                    triggerPrintHtml(html, `برنامه هفتگی - ${targetName}`);
+                  }}
+                  className="text-xs gap-1.5 cursor-pointer shadow-sm text-navy hover:bg-navy/5"
+                  title="چاپ برنامه هفتگی این کلاس یا دبیر (جهت نصب در کلاس یا تحویل به دبیر)"
+                >
+                  <Printer className="h-3.5 w-3.5" />
+                  <span>چاپ این برنامه</span>
+                </Button>
+
+                {hideHeader && (
+                  <Button
+                    size="sm"
+                    onClick={() => {
+                      setForm((f) => ({
+                        ...f,
+                        classRoomId: viewMode === "classroom" ? (f.classRoomId || activeClassroom) : f.classRoomId,
+                        teacherUserId: viewMode === "teacher" ? (f.teacherUserId || activeTeacher) : f.teacherUserId,
+                      }));
+                      setDialogOpen(true);
+                    }}
+                    className="bg-emerald hover:bg-emerald-dark gap-1.5 shadow-sm cursor-pointer text-xs"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    افزودن درس به برنامه
+                  </Button>
+                )}
+              </div>
           </CardHeader>
           <CardContent>
             {viewMode === "classroom" ? (

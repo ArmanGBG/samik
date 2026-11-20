@@ -23,7 +23,8 @@ import {
   Search,
   Star,
   ThumbsDown,
-  ThumbsUp
+  ThumbsUp,
+  Printer,
 } from "lucide-react";
 import { PageHeader } from "@/components/shared/page-header";
 import { ScrollReveal } from "@/components/shared/scroll-reveal";
@@ -31,6 +32,8 @@ import { QuickPointButtons } from "@/components/teacher/quick-point-buttons";
 import { PersianDatePicker } from "@/components/ui/persian-date-picker";
 import { cn } from "@/lib/utils";
 import { toPersianDate } from "@/lib/date-utils";
+import { triggerPrintHtml } from "@/lib/print/print-engine";
+import { generateGradebookHtml } from "@/lib/print/school-print-templates";
 import { useRouter } from "next/navigation";
 
 interface GradeCell {
@@ -273,6 +276,42 @@ export function GradebookGrid({ classId, subjectId }: { classId: string; subject
         icon={BookOpen}
         actions={
           <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                const assessmentTitles = data.assessments.map((a) => a.title);
+                const printStudents = data.students.map((st) => ({
+                  fullName: st.fullName,
+                  nationalCode: "",
+                  monthlyAverage: st.monthlyAverage,
+                  grades: data.assessments.map((a) => {
+                    const cell = st.grades.find((g) => g.assessmentId === a.id);
+                    return {
+                      title: a.title,
+                      numericScore: cell?.numericScore ?? null,
+                      descriptiveScore: cell?.descriptiveScore ?? null,
+                      isAbsent: cell?.isAbsent ?? false,
+                    };
+                  }),
+                }));
+
+                const html = generateGradebookHtml(printStudents, assessmentTitles, {
+                  classroomName: `${data.classroom.gradeLevel} ${data.classroom.name}`,
+                  subjectTitle: data.classroom.subjects?.join("، ") || "درس",
+                  teacherName: "دبیر مربوطه",
+                  meta: {
+                    schoolName: "آموزشگاه",
+                  },
+                });
+                triggerPrintHtml(html, `دفتر نمرات - ${data.classroom.name}`);
+              }}
+              className="h-8 gap-1.5 text-xs text-navy border-navy/30 hover:bg-navy/5 cursor-pointer"
+              title="چاپ رسمی کارنامه و ریزنمرات کلاسی جهت ارائه به آموزشگاه و اداره"
+            >
+              <Printer className="h-3.5 w-3.5" />
+              <span>چاپ ریزنمرات</span>
+            </Button>
             <Button
               variant="outline"
               size="sm"

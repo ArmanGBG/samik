@@ -4,6 +4,8 @@ import { z } from "zod";
 import { withTenantContext } from "@/lib/middleware-helpers/tenant-guard";
 import { db } from "@/lib/db";
 
+export const dynamic = "force-dynamic";
+
 /**
  * GET /api/v1/notifications/outbox?status=DRAFT
  *
@@ -11,9 +13,12 @@ import { db } from "@/lib/db";
  * Pass ?status=all to include SENT/FAILED/DISCARDED.
  */
 export async function GET(req: NextRequest) {
-  return withTenantContext(req, ["DEPUTY", "PRINCIPAL"], async () => {
+  return withTenantContext(req, ["DEPUTY", "PRINCIPAL"], async (ctx) => {
     const statusFilter = req.nextUrl.searchParams.get("status") ?? "DRAFT";
-    const where = statusFilter === "all" ? {} : { status: statusFilter as any };
+    const where: Record<string, unknown> = { schoolId: ctx.schoolId };
+    if (statusFilter !== "all") {
+      where.status = statusFilter;
+    }
 
     const records = await db.notificationOutbox.findMany({
       where,

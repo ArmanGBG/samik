@@ -59,6 +59,17 @@ export async function GET(req: NextRequest) {
         select: { id: true, name: true, subdomain: true },
       })
     );
+    if (!school) {
+      const academy = await runWithTenant({ bypassTenantFilter: true }, () =>
+        db.academy.findUnique({
+          where: { id: payload.schoolId },
+          select: { id: true, name: true, code: true },
+        })
+      );
+      if (academy) {
+        school = { id: academy.id, name: academy.name, subdomain: academy.code };
+      }
+    }
   } else {
     school = { id: "__global__", name: "پلتفرم سامیک", subdomain: "platform" };
   }

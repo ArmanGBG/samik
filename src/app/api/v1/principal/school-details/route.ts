@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { withTenantContext } from "@/lib/middleware-helpers/tenant-guard";
 import { db } from "@/lib/db";
 
+export const dynamic = "force-dynamic";
+
 /**
  * GET /api/v1/principal/school-details
  *

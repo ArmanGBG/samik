@@ -64,10 +64,18 @@ import {
   Sparkles,
   Search,
   CalendarDays,
+  Printer,
+  FileSpreadsheet,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toPersianDate } from "@/lib/date-utils";
 import { toEnglishDigits } from "@/lib/persian-digits";
+import { triggerPrintHtml } from "@/lib/print/print-engine";
+import {
+  generateStudentRosterHtml,
+  generateBlankTeacherSheetHtml,
+  generateStaffListHtml,
+} from "@/lib/print/school-print-templates";
 import { PageHeader } from "@/components/shared/page-header";
 import { TimetableBuilder } from "@/components/dashboard/timetable-builder";
 import { SubjectsManager } from "@/components/dashboard/subjects-manager";
@@ -286,8 +294,8 @@ export function SchoolDetailsManager({
       const qs = isPrincipal ? "" : (targetId ? `?schoolId=${targetId}` : "");
 
       const [schoolRes, slotsRes] = await Promise.all([
-        fetch(url).then((r) => r.json()),
-        fetch(`/api/v1/deputy/timetable${qs}`)
+        fetch(url, { cache: "no-store" }).then((r) => r.json()),
+        fetch(`/api/v1/deputy/timetable${qs}`, { cache: "no-store" })
           .then((r) => r.json())
           .catch(() => ({ ok: false, slots: [] })),
       ]);
@@ -1033,6 +1041,35 @@ export function SchoolDetailsManager({
                   </button>
                 </div>
                 <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    const printItems = filteredStaff.map((s) => {
+                      const u = s.user || (s as any);
+                      const fName = u?.firstName || s.firstName || "";
+                      const lName = u?.lastName || s.lastName || "";
+                      return {
+                        fullName: `${fName} ${lName}`.trim() || s.fullName || "—",
+                        role: s.role,
+                        roleLabel: s.role === "PRINCIPAL" ? "مدیر مدرسه" : s.role === "DEPUTY" ? "معاون مدرسه" : "دبیر / آموزگار",
+                        phoneNumber: u?.phoneNumber || s.phoneNumber,
+                        nationalCode: u?.nationalCode || s.nationalCode,
+                      };
+                    });
+                    const html = generateStaffListHtml(printItems, {
+                      meta: {
+                        schoolName: school.name,
+                      },
+                    });
+                    triggerPrintHtml(html, `لیست پرسنل - ${school.name}`);
+                  }}
+                  className="text-xs gap-1.5 cursor-pointer shadow-sm text-navy hover:bg-navy/5"
+                  title="چاپ رسمی لیست کادر و پرسنل مدرسه"
+                >
+                  <Printer className="h-3.5 w-3.5" />
+                  <span>چاپ لیست همکاران</span>
+                </Button>
+                <Button
                   onClick={() => setAddStaffOpen(true)}
                   size="sm"
                   className="bg-navy hover:bg-navy-dark text-xs gap-1.5 cursor-pointer shadow-sm"
@@ -1225,6 +1262,64 @@ export function SchoolDetailsManager({
                   </Select>
                 )}
                 <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    const selectedCls = school.classrooms.find((c) => c.id === selectedClassFilter);
+                    const isAll = selectedClassFilter === "ALL";
+                    const printItems = filteredEnrollments.map((e) => ({
+                      fullName: `${e.student?.firstName || ""} ${e.student?.lastName || ""}`.trim() || "—",
+                      nationalCode: e.student?.nationalCode || "",
+                      classroomName: e.classRoom ? `${e.classRoom.gradeLevel} ${e.classRoom.name}` : "بدون کلاس",
+                      guardianPhone1: e.guardianPhone1,
+                      guardianPhone2: e.guardianPhone2 || undefined,
+                      phoneNumber: e.student?.phoneNumber,
+                      status: e.status,
+                    }));
+                    const html = generateStudentRosterHtml(printItems, {
+                      title: isAll ? `لیست رسمی کلیه دانش‌آموزان مدرسه` : `لیست رسمی دانش‌آموزان کلاس ${selectedCls?.name || ""}`,
+                      subTitle: isAll ? `مجموع آمار: ${printItems.length.toLocaleString("fa-IR")} دانش‌آموز` : `پایه ${selectedCls?.gradeLevel || ""} • تعداد: ${printItems.length.toLocaleString("fa-IR")} نفر`,
+                      showClassCol: isAll,
+                      meta: {
+                        schoolName: school.name,
+                      },
+                    });
+                    triggerPrintHtml(html, `لیست دانش‌آموزان - ${school.name}`);
+                  }}
+                  className="text-xs gap-1.5 cursor-pointer shadow-sm text-navy hover:bg-navy/5"
+                  title="چاپ رسمی لیست اسامی دانش‌آموزان"
+                >
+                  <Printer className="h-3.5 w-3.5" />
+                  <span>چاپ لیست اسامی</span>
+                </Button>
+
+                {selectedClassFilter !== "ALL" && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      const selectedCls = school.classrooms.find((c) => c.id === selectedClassFilter);
+                      const printItems = filteredEnrollments.map((e) => ({
+                        fullName: `${e.student?.firstName || ""} ${e.student?.lastName || ""}`.trim() || "—",
+                        nationalCode: e.student?.nationalCode || "",
+                      }));
+                      const html = generateBlankTeacherSheetHtml(printItems, {
+                        classroomName: `${selectedCls?.gradeLevel || ""} ${selectedCls?.name || ""}`,
+                        meta: {
+                          schoolName: school.name,
+                        },
+                      });
+                      triggerPrintHtml(html, `دفتر کلاسی خام - ${selectedCls?.name}`);
+                    }}
+                    className="text-xs gap-1.5 cursor-pointer shadow-sm text-slate-700 hover:bg-slate-100"
+                    title="چاپ دفتر کلاسی خام معلم (با ستون‌های خالی جلسات جهت ثبت دستی حضور و غیاب و نمرات)"
+                  >
+                    <FileSpreadsheet className="h-3.5 w-3.5 text-emerald" />
+                    <span>دفتر خام کلاسی معلم</span>
+                  </Button>
+                )}
+
+                <Button
                   onClick={() => setAddStudentOpen(true)}
                   size="sm"
                   className="bg-emerald hover:bg-emerald-dark text-xs gap-1.5 cursor-pointer shadow-sm text-white"
@@ -1269,7 +1364,8 @@ export function SchoolDetailsManager({
                         <TableHead className="text-right min-w-[180px]">نام و نام خانوادگی</TableHead>
                         <TableHead className="text-right min-w-[120px]">کد ملی</TableHead>
                         <TableHead className="text-right min-w-[140px]">کلاس</TableHead>
-                        <TableHead className="text-right min-w-[130px]">شماره موبایل</TableHead>
+                        <TableHead className="text-right min-w-[130px]">شماره ولی (پیامک)</TableHead>
+                        <TableHead className="text-right min-w-[130px]">شماره دانش‌آموز</TableHead>
                         <TableHead className="text-right min-w-[120px]">وضعیت پرونده</TableHead>
                         <TableHead className="text-right min-w-[120px]">تاریخ ثبت‌نام</TableHead>
                         <TableHead className="text-left w-[110px] min-w-[110px] pl-4">عملیات</TableHead>
@@ -1305,7 +1401,10 @@ export function SchoolDetailsManager({
                                 <span className="text-xs text-muted-foreground">— بدون کلاس</span>
                               )}
                             </TableCell>
-                            <TableCell className="text-right font-mono text-xs tabular-nums">
+                            <TableCell className="text-right font-mono text-xs tabular-nums text-navy font-semibold">
+                              {e.guardianPhone1 || "—"}
+                            </TableCell>
+                            <TableCell className="text-right font-mono text-xs tabular-nums text-muted-foreground">
                               {stPhone}
                             </TableCell>
                             <TableCell className="text-right">

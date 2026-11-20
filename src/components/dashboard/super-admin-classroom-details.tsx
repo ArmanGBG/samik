@@ -47,14 +47,23 @@ import {
   Clock,
   BookOpen,
   Pencil,
-  Trash2,
-  Search,
   School,
   User,
+  Printer,
+  FileSpreadsheet,
+  Search,
+  Trash2,
+  ClipboardCheck,
 } from "lucide-react";
+import { AdminAttendanceDialog } from "@/components/attendance/admin-attendance-dialog";
 import { cn } from "@/lib/utils";
 import { toPersianDate } from "@/lib/date-utils";
 import { toEnglishDigits } from "@/lib/persian-digits";
+import { triggerPrintHtml } from "@/lib/print/print-engine";
+import {
+  generateStudentRosterHtml,
+  generateBlankTeacherSheetHtml,
+} from "@/lib/print/school-print-templates";
 import { PageHeader } from "@/components/shared/page-header";
 import { GRADES, MAJORS, gradeHasMajor, getMajorLabel } from "@/lib/constants/grades";
 import { KpiCardGrid } from "@/components/shared/kpi-card";
@@ -108,6 +117,7 @@ export function SuperAdminClassroomDetails({
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("ALL");
+  const [attendanceModalOpen, setAttendanceModalOpen] = useState(false);
 
   // Add / Edit Dialogs
   const [addStudentOpen, setAddStudentOpen] = useState(false);
@@ -413,7 +423,70 @@ export function SuperAdminClassroomDetails({
           </div>
         }
         actions={
-          <div className="flex gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                const printItems = classroomStudents.map((e) => ({
+                  fullName: `${e.student?.firstName || ""} ${e.student?.lastName || ""}`.trim() || "—",
+                  nationalCode: e.student?.nationalCode || "",
+                  classroomName: classroom.name,
+                  guardianPhone1: e.guardianPhone1,
+                  guardianPhone2: e.guardianPhone2 || undefined,
+                  phoneNumber: e.student?.phoneNumber,
+                  status: e.status,
+                }));
+                const html = generateStudentRosterHtml(printItems, {
+                  title: `لیست رسمی دانش‌آموزان کلاس ${classroom.name}`,
+                  subTitle: `پایه ${classroom.gradeLevel} • تعداد: ${printItems.length.toLocaleString("fa-IR")} نفر`,
+                  showClassCol: false,
+                  meta: {
+                    schoolName: school.name,
+                  },
+                });
+                triggerPrintHtml(html, `لیست دانش‌آموزان کلاس ${classroom.name}`);
+              }}
+              className="text-xs gap-1.5 cursor-pointer shadow-sm text-navy hover:bg-navy/5"
+              title="چاپ رسمی لیست اسامی دانش‌آموزان این کلاس"
+            >
+              <Printer className="h-3.5 w-3.5" />
+              <span>چاپ لیست اسامی</span>
+            </Button>
+
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                const printItems = classroomStudents.map((e) => ({
+                  fullName: `${e.student?.firstName || ""} ${e.student?.lastName || ""}`.trim() || "—",
+                  nationalCode: e.student?.nationalCode || "",
+                }));
+                const html = generateBlankTeacherSheetHtml(printItems, {
+                  classroomName: `${classroom.gradeLevel} ${classroom.name}`,
+                  meta: {
+                    schoolName: school.name,
+                  },
+                });
+                triggerPrintHtml(html, `دفتر کلاسی خام - ${classroom.name}`);
+              }}
+              className="text-xs gap-1.5 cursor-pointer shadow-sm text-slate-700 hover:bg-slate-100"
+              title="چاپ دفتر کلاسی خام معلم (با ستون‌های خالی جلسات جهت ثبت دستی حضور و غیاب و نمرات)"
+            >
+              <FileSpreadsheet className="h-3.5 w-3.5 text-emerald" />
+              <span>دفتر خام کلاسی</span>
+            </Button>
+
+            <Button
+              size="sm"
+              onClick={() => setAttendanceModalOpen(true)}
+              className="text-xs gap-1.5 cursor-pointer shadow-sm bg-navy hover:bg-navy-dark text-white font-medium"
+              title="ثبت یا ویرایش حضور و غیاب دانش‌آموزان این کلاس"
+            >
+              <ClipboardCheck className="h-3.5 w-3.5" />
+              <span>ثبت حضور و غیاب کلاس</span>
+            </Button>
+
             <Button
               onClick={() => {
                 setEditClassroomForm({
@@ -436,7 +509,7 @@ export function SuperAdminClassroomDetails({
               className="bg-emerald hover:bg-emerald-dark text-white text-xs gap-1.5 cursor-pointer shadow-sm"
             >
               <Plus className="h-4 w-4" />
-              <span>ثبت‌نام دانش‌آموز جدید در این کلاس</span>
+              <span>ثبت‌نام دانش‌آموز جدید</span>
             </Button>
           </div>
         }
@@ -967,6 +1040,16 @@ export function SuperAdminClassroomDetails({
           </form>
         </DialogContent>
       </Dialog>
+
+      {/* Attendance Modal for this classroom */}
+      <AdminAttendanceDialog
+        open={attendanceModalOpen}
+        onOpenChange={setAttendanceModalOpen}
+        initialClassroomId={classroomId}
+        onSuccess={() => {
+          loadData();
+        }}
+      />
     </div>
   );
 }

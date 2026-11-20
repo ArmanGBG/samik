@@ -19,7 +19,9 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { toEnglishDigits } from "@/lib/persian-digits";
 import {
   Tooltip,
   TooltipContent,
@@ -65,11 +67,12 @@ export function NotificationsOutbox() {
   const [sending, setSending] = useState(false);
   const [editing, setEditing] = useState<OutboxItem | null>(null);
   const [editText, setEditText] = useState("");
+  const [editPhone, setEditPhone] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const r = await fetch("/api/v1/notifications/outbox?status=DRAFT");
+      const r = await fetch("/api/v1/notifications/outbox?status=DRAFT", { cache: "no-store" });
       const d = await r.json();
       if (d.ok) setItems(d.outbox);
     } catch (err) {
@@ -114,22 +117,36 @@ export function NotificationsOutbox() {
   async function handleEdit(item: OutboxItem) {
     setEditing(item);
     setEditText(item.messageBody);
+    setEditPhone(item.recipientPhone || "");
   }
 
   async function saveEdit() {
     if (!editing) return;
+    const cleanPhone = toEnglishDigits(editPhone.trim());
+    if (!cleanPhone || !/^09\d{9}$/.test(cleanPhone)) {
+      toast.error("شماره همراه ولی نامعتبر است (باید ۱۱ رقم بوده و با ۰۹ شروع شود).");
+      return;
+    }
+    if (!editText.trim()) {
+      toast.error("متن پیامک نمی‌تواند خالی باشد.");
+      return;
+    }
+
     try {
       const r = await fetch(`/api/v1/notifications/outbox/${editing.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messageBody: editText }),
+        body: JSON.stringify({
+          messageBody: editText.trim(),
+          recipientPhone: cleanPhone,
+        }),
       });
       const d = await r.json();
       if (!d.ok) {
         toast.error(d.error ?? "ویرایش ناموفق بود.");
         return;
       }
-      toast.success("متن پیامک ویرایش شد.");
+      toast.success("پیش‌نویس پیامک و شماره ولی با موفقیت به‌روزرسانی شد.");
       setEditing(null);
       load();
     } catch {
@@ -141,12 +158,17 @@ export function NotificationsOutbox() {
     if (!confirm(`حذف پیش‌نویس پیامک برای ${name}؟`)) return;
     try {
       const r = await fetch(`/api/v1/notifications/outbox/${id}`, { method: "DELETE" });
-      const d = await r.json();
-      if (!d.ok) {
+      const d = await r.json().catch(() => ({ ok: false, error: "پاسخ نامعتبر از سرور." }));
+      if (!r.ok || !d.ok) {
         toast.error(d.error ?? "حذف ناموفق بود.");
         return;
       }
       toast.success("پیش‌نویس حذف شد.");
+      setSelected((prev) => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
       load();
     } catch {
       toast.error("خطا در برقراری ارتباط با سرور.");
@@ -397,18 +419,39 @@ export function NotificationsOutbox() {
       <Dialog open={!!editing} onOpenChange={(o) => !o && setEditing(null)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle className="text-navy">ویرایش متن پیامک ارسالی</DialogTitle>
+            <DialogTitle className="text-navy flex items-center gap-2">
+              <Edit3 className="h-4 w-4" />
+              <span>ویرایش پیامک و شماره تماس ولی</span>
+            </DialogTitle>
           </DialogHeader>
-          <div className="space-y-3 py-2">
+          <div className="space-y-3.5 py-2">
             <div>
-              <Label className="text-xs text-muted-foreground">دانش‌آموز و شماره دریافت‌کننده</Label>
-              <p className="text-sm font-medium mt-0.5">
-                {editing?.studentName} •{" "}
-                <span dir="ltr" className="tabular-nums font-mono">
-                  {editing?.recipientPhone}
-                </span>
+              <Label className="text-xs text-muted-foreground">نام دانش‌آموز</Label>
+              <p className="text-sm font-semibold text-navy mt-0.5">
+                {editing?.studentName}
               </p>
             </div>
+
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <Label htmlFor="outbox-edit-phone" className="text-xs font-medium">شماره همراه ولی (گیرنده پیامک)</Label>
+                <span className="text-[10px] text-muted-foreground font-normal">ارسال به این شماره</span>
+              </div>
+              <Input
+                id="outbox-edit-phone"
+                value={editPhone}
+                onChange={(e) => setEditPhone(e.target.value)}
+                dir="ltr"
+                inputMode="numeric"
+                className="font-mono text-left tabular-nums h-9 text-xs"
+                placeholder="09123456789"
+                maxLength={11}
+              />
+              <p className="text-[11px] text-muted-foreground">
+                با تغییر این شماره، شماره ولی در پرونده دانش‌آموز نیز به‌روزرسانی می‌شود.
+              </p>
+            </div>
+
             <div className="space-y-1.5">
               <Label className="text-xs font-medium">متن پیامک ارسالی به ولی</Label>
               <Textarea
@@ -434,10 +477,10 @@ export function NotificationsOutbox() {
             </Button>
             <Button
               onClick={saveEdit}
-              disabled={!editText.trim()}
+              disabled={!editText.trim() || !editPhone.trim()}
               className="bg-emerald hover:bg-emerald-dark cursor-pointer gap-2"
             >
-              ذخیره تغییرات متن
+              ذخیره تغییرات
             </Button>
           </DialogFooter>
         </DialogContent>

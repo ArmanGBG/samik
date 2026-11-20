@@ -50,10 +50,13 @@ import {
   Filter,
   Pencil,
   Trash2,
+  Printer,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toPersianDate } from "@/lib/date-utils";
 import { toEnglishDigits } from "@/lib/persian-digits";
+import { triggerPrintHtml } from "@/lib/print/print-engine";
+import { generateStudentRosterHtml } from "@/lib/print/school-print-templates";
 import { PageHeader } from "@/components/shared/page-header";
 import { KpiCardGrid } from "@/components/shared/kpi-card";
 import { EmptyState } from "@/components/shared/empty-state";
@@ -157,8 +160,8 @@ function SuperAdminStudentsContent() {
     setLoadingStudents(true);
     try {
       const [classRes, studRes] = await Promise.all([
-        fetch(`/api/v1/principal/classrooms?schoolId=${selectedSchoolId}`),
-        fetch(`/api/v1/principal/students?schoolId=${selectedSchoolId}${selectedClassroomId !== "ALL" ? `&classroomId=${selectedClassroomId}` : ""}`),
+        fetch(`/api/v1/principal/classrooms?schoolId=${selectedSchoolId}`, { cache: "no-store" }),
+        fetch(`/api/v1/principal/students?schoolId=${selectedSchoolId}${selectedClassroomId !== "ALL" ? `&classroomId=${selectedClassroomId}` : ""}`, { cache: "no-store" }),
       ]);
 
       const [classData, studData] = await Promise.all([classRes.json(), studRes.json()]);
@@ -427,6 +430,38 @@ function SuperAdminStudentsContent() {
               </div>
             )}
 
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                const selectedCls = classrooms.find((c) => c.id === selectedClassroomId);
+                const isAll = selectedClassroomId === "ALL";
+                const printItems = students.map((st) => ({
+                  fullName: st.fullName || `${st.firstName || ""} ${st.lastName || ""}`.trim() || "—",
+                  nationalCode: st.nationalCode || "",
+                  classroomName: st.classRoomName || "بدون کلاس",
+                  guardianPhone1: st.guardianPhone1,
+                  guardianPhone2: st.guardianPhone2 || undefined,
+                  phoneNumber: st.phoneNumber,
+                  status: st.status,
+                }));
+                const html = generateStudentRosterHtml(printItems, {
+                  title: isAll ? `لیست رسمی کلیه دانش‌آموزان مدرسه` : `لیست رسمی دانش‌آموزان کلاس ${selectedCls?.name || ""}`,
+                  subTitle: isAll ? `مجموع آمار: ${printItems.length.toLocaleString("fa-IR")} دانش‌آموز` : `پایه ${selectedCls?.gradeLevel || ""} • تعداد: ${printItems.length.toLocaleString("fa-IR")} نفر`,
+                  showClassCol: isAll,
+                  meta: {
+                    schoolName: selectedSchool ? selectedSchool.name : "آموزشگاه",
+                  },
+                });
+                triggerPrintHtml(html, `لیست دانش‌آموزان - ${selectedSchool?.name || ""}`);
+              }}
+              className="text-xs gap-1.5 cursor-pointer shadow-sm text-navy hover:bg-navy/5 h-8"
+              title="چاپ رسمی لیست اسامی دانش‌آموزان"
+            >
+              <Printer className="h-3.5 w-3.5" />
+              <span>چاپ لیست اسامی</span>
+            </Button>
+
             {selectedSchoolId && (
               <Button asChild variant="outline" size="sm" className="text-xs gap-1.5 cursor-pointer h-8">
                 <Link href={`/super-admin/schools/${selectedSchoolId}`}>
@@ -457,7 +492,8 @@ function SuperAdminStudentsContent() {
                     <TableHead className="text-right min-w-[180px]">نام و نام خانوادگی</TableHead>
                     <TableHead className="text-right min-w-[120px]">کد ملی</TableHead>
                     <TableHead className="text-right min-w-[140px]">کلاس درس</TableHead>
-                    <TableHead className="text-right min-w-[130px]">شماره همراه</TableHead>
+                    <TableHead className="text-right min-w-[130px]">شماره ولی (پیامک)</TableHead>
+                    <TableHead className="text-right min-w-[130px]">شماره دانش‌آموز</TableHead>
                     <TableHead className="text-right min-w-[120px]">وضعیت پرونده</TableHead>
                     <TableHead className="text-right min-w-[120px]">تاریخ ثبت‌نام</TableHead>
                     <TableHead className="text-left w-[110px] min-w-[110px] pl-4">عملیات</TableHead>
@@ -490,8 +526,11 @@ function SuperAdminStudentsContent() {
                             <span className="text-xs text-muted-foreground">— بدون کلاس</span>
                           )}
                         </TableCell>
-                        <TableCell className="text-right font-mono text-xs tabular-nums">
-                          {st.phoneNumber}
+                        <TableCell className="text-right font-mono text-xs tabular-nums text-navy font-semibold">
+                          {st.guardianPhone1 || "—"}
+                        </TableCell>
+                        <TableCell className="text-right font-mono text-xs tabular-nums text-muted-foreground">
+                          {st.phoneNumber || "—"}
                         </TableCell>
                         <TableCell className="text-right">
                           <Badge
