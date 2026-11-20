@@ -1,0 +1,11 @@
+.git
+node_modules
+.next
+.env*
+!liara.json
+*.log
+dev.log
+server.log
+.DS_Store
+*.docx
+*.xlsx
